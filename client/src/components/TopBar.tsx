@@ -1,9 +1,10 @@
+import type { InvoiceFormHeaderState, InvoiceWorkflowStatus } from "../types";
 import type { ViewName } from "./Sidebar";
 
 type TopBarProps = {
   activeView: ViewName;
   presetName: string;
-  editingInvoiceNo?: string | null;
+  formHeader?: InvoiceFormHeaderState | null;
 };
 
 const viewMeta: Record<ViewName, { title: string; sub: string }> = {
@@ -25,13 +26,35 @@ const viewMeta: Record<ViewName, { title: string; sub: string }> = {
   }
 };
 
-export function TopBar({ activeView, presetName, editingInvoiceNo }: TopBarProps) {
+const workflowStatusLabels: Record<InvoiceWorkflowStatus, string> = {
+  draft: "Draft",
+  checkedIn: "Checked In",
+  checkedOut: "Checked Out",
+  cancelled: "Cancelled"
+};
+
+function invoiceSubtitle(invoiceNumber: string) {
+  if (!invoiceNumber || invoiceNumber.toLowerCase().includes("not generated")) {
+    return "Invoice number not generated yet";
+  }
+
+  return `Invoice ${invoiceNumber}`;
+}
+
+export function TopBar({ activeView, presetName, formHeader }: TopBarProps) {
   const meta = viewMeta[activeView];
+  const title = formHeader ? `${workflowStatusLabels[formHeader.workflowStatus]} Invoice` : meta.title;
+  const sub = formHeader ? invoiceSubtitle(formHeader.invoiceNumber) : meta.sub;
+  const saveLabel = formHeader?.saveState === "unsaved" ? "Unsaved *" : "Saved";
+
   return (
     <header className="topbar">
-      <div>
-        <h1 className="page-title">{editingInvoiceNo ? `Editing ${editingInvoiceNo}` : meta.title}</h1>
-        <p className="page-sub">{meta.sub}</p>
+      <div className="topbar-copy">
+        <div className="page-title-row">
+          <h1 className="page-title">{title}</h1>
+          {formHeader ? <span className={`save-indicator ${formHeader.saveState}`}>{saveLabel}</span> : null}
+        </div>
+        <p className="page-sub">{sub}</p>
       </div>
       <span className="preset-badge">{presetName || "No preset loaded"}</span>
     </header>

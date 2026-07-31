@@ -22,6 +22,17 @@ export type Settings = {
   logoDataUrl: string | null;
 };
 
+export type InvoiceWorkflowStatus = "draft" | "checkedIn" | "checkedOut" | "cancelled";
+export type CreatableInvoiceWorkflowStatus = Exclude<InvoiceWorkflowStatus, "cancelled">;
+export type InvoiceRecordStatus = "active" | "cancelled";
+export type InvoiceFormSaveState = "saved" | "unsaved";
+
+export type InvoiceFormHeaderState = {
+  workflowStatus: InvoiceWorkflowStatus;
+  invoiceNumber: string;
+  saveState: InvoiceFormSaveState;
+};
+
 export type LineItemInput = {
   id: string;
   presetKey: string;
@@ -69,13 +80,13 @@ export type InvoicePayload = {
   partyState: string;
   groupName: string;
   roomNo: string;
+  workflowStatus: CreatableInvoiceWorkflowStatus;
   lineItems: Omit<LineItemInput, "id">[];
   adjustments: Omit<AdjustmentInput, "id">[];
 };
 
-export type Invoice = Omit<InvoicePayload, "lineItems" | "adjustments"> & {
+type InvoiceRecordBase = Omit<InvoicePayload, "lineItems" | "adjustments" | "workflowStatus"> & {
   _id?: string;
-  invNo: string;
   lineItems: CalculatedLineItem[];
   adjustments: Adjustment[];
   totalTaxable: number;
@@ -86,11 +97,22 @@ export type Invoice = Omit<InvoicePayload, "lineItems" | "adjustments"> & {
   addTotal: number;
   deductTotal: number;
   netTotal: number;
-  status: "active" | "cancelled";
-  cancelledAt?: string;
   presetSnapshot: Preset;
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type Invoice = InvoiceRecordBase & {
+  invNo: string;
+  status: InvoiceRecordStatus;
+  workflowStatus?: InvoiceWorkflowStatus;
+  cancelledAt?: string;
+};
+
+export type InvoiceDraft = InvoiceRecordBase & {
+  _id: string;
+  status?: "active";
+  workflowStatus: "draft";
 };
 
 export type InvoiceListItem = {
@@ -102,8 +124,24 @@ export type InvoiceListItem = {
   totalSGST: number;
   totalIGST: number;
   items: number;
-  status: "active" | "cancelled";
+  status: InvoiceRecordStatus | InvoiceWorkflowStatus;
+  workflowStatus?: InvoiceWorkflowStatus;
   createdAt?: string;
+};
+
+export type InvoiceDraftListItem = {
+  _id: string;
+  invDate: string;
+  partyName: string;
+  netTotal: number;
+  totalCGST: number;
+  totalSGST: number;
+  totalIGST: number;
+  items: number;
+  status: "active";
+  workflowStatus: "draft";
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type InvoiceFilters = {
@@ -111,5 +149,6 @@ export type InvoiceFilters = {
   to: string;
   gst: "" | "yes" | "no";
   status: "" | "active" | "cancelled";
+  workflowStatus?: "" | InvoiceWorkflowStatus;
   search: string;
 };

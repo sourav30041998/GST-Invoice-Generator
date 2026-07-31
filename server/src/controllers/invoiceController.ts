@@ -2,11 +2,16 @@ import type { RequestHandler } from "express";
 import {
   cancelInvoice,
   createInvoice,
+  createInvoiceDraft,
+  deleteInvoiceDraft,
   exportInvoicesCsv,
   getInvoice,
+  getInvoiceDraft,
+  listInvoiceDrafts,
   listInvoices,
   peekInvoiceNumber,
-  updateInvoice
+  updateInvoice,
+  updateInvoiceDraft
 } from "../services/invoiceService.js";
 import { getPreset } from "../services/settingsService.js";
 import { invoicePayloadSchema, invoiceQuerySchema } from "../validation/invoiceSchemas.js";
@@ -27,6 +32,50 @@ export const createInvoiceRecord: RequestHandler = async (req, res, next) => {
     const payload = invoicePayloadSchema.parse(req.body);
     const invoice = await createInvoice(payload);
     res.status(201).json(invoice);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
+  try {
+    const payload = invoicePayloadSchema.parse(req.body);
+    const draft = await createInvoiceDraft(payload);
+    res.status(201).json(draft);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
+  try {
+    const payload = invoicePayloadSchema.parse(req.body);
+    res.json(await updateInvoiceDraft(req.params.draftId, payload));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listInvoiceDraftRecords: RequestHandler = async (_req, res, next) => {
+  try {
+    res.json(await listInvoiceDrafts());
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
+  try {
+    res.json(await getInvoiceDraft(req.params.draftId));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
+  try {
+    await deleteInvoiceDraft(req.params.draftId);
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

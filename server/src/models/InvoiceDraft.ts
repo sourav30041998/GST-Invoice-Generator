@@ -31,9 +31,8 @@ const adjustmentSchema = new Schema(
   { _id: false }
 );
 
-const invoiceSchema = new Schema(
+const invoiceDraftSchema = new Schema(
   {
-    invNo: { type: String, required: true, unique: true, trim: true },
     invDate: { type: String, required: true },
     checkinDate: { type: String, default: "" },
     checkoutDate: { type: String, default: "" },
@@ -44,7 +43,7 @@ const invoiceSchema = new Schema(
     partyState: { type: String, default: "" },
     groupName: { type: String, default: "" },
     roomNo: { type: String, default: "" },
-    workflowStatus: { type: String, enum: ["draft", "checkedIn", "checkedOut", "cancelled"], default: "checkedOut", index: true },
+    workflowStatus: { type: String, enum: ["draft"], default: "draft", index: true },
     lineItems: { type: [lineItemSchema], default: [] },
     adjustments: { type: [adjustmentSchema], default: [] },
     totalTaxable: { type: Number, default: 0 },
@@ -55,15 +54,11 @@ const invoiceSchema = new Schema(
     addTotal: { type: Number, default: 0 },
     deductTotal: { type: Number, default: 0 },
     netTotal: { type: Number, default: 0 },
-    status: { type: String, enum: ["active", "cancelled"], default: "active", index: true },
-    cancelledAt: { type: Date },
     presetSnapshot: { type: Schema.Types.Mixed, required: true }
   },
   { timestamps: true, minimize: false }
 );
 
-invoiceSchema.index({ invDate: -1 });
-invoiceSchema.index({ workflowStatus: 1, createdAt: -1 });
-invoiceSchema.index({ partyName: "text", invNo: "text" });
+invoiceDraftSchema.index({ createdAt: -1 });
 
-export const InvoiceModel = model("Invoice", invoiceSchema);
+export const InvoiceDraftModel = model("InvoiceDraft", invoiceDraftSchema);

@@ -1,4 +1,6 @@
 import { z } from "zod";
+export const invoiceWorkflowStatusSchema = z.enum(["draft", "checkedIn", "checkedOut"]);
+export const invoiceWorkflowQueryStatusSchema = z.enum(["", "draft", "checkedIn", "checkedOut", "cancelled"]);
 
 export const presetSchema = z.object({
   business_name: z.string().trim().min(1).max(120),
@@ -55,6 +57,7 @@ export const invoicePayloadSchema = z.object({
   partyState: z.string().trim().min(1, "State is required").max(120),
   groupName: z.string().trim().max(160).optional().default(""),
   roomNo: z.string().trim().min(1, "Room no. is required").max(80),
+  workflowStatus: invoiceWorkflowStatusSchema.optional().default("checkedOut"),
   lineItems: z.array(lineItemSchema).min(1),
   adjustments: z.array(adjustmentSchema).optional().default([])
 });
@@ -64,6 +67,7 @@ export const invoiceQuerySchema = z.object({
   to: z.string().optional(),
   gst: z.enum(["", "yes", "no"]).optional().default(""),
   status: z.enum(["", "active", "cancelled"]).optional().default(""),
+  workflowStatus: invoiceWorkflowQueryStatusSchema.optional().default(""),
   search: z.string().trim().optional().default("")
 });
 

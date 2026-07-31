@@ -20,3 +20,22 @@ export function formatDate(value?: string) {
     year: "numeric"
   });
 }
+export function formatDateTime(value?: string) {
+  if (!value) {
+    return "";
+  }
+
+  const source = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  const date = new Date(source);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}

@@ -1,4 +1,4 @@
-import type { Invoice, InvoiceFilters, InvoiceListItem, InvoicePayload, Preset, Settings } from "./types";
+import type { Invoice, InvoiceDraft, InvoiceDraftListItem, InvoiceFilters, InvoiceListItem, InvoicePayload, Preset, Settings } from "./types";
 
 const configuredApiUrl = import.meta.env.VITE_API_URL as string | undefined;
 const API_BASE = configuredApiUrl && !configuredApiUrl.includes("localhost:5000") ? configuredApiUrl : "/api";
@@ -51,7 +51,20 @@ export const api = {
   nextInvoiceNumber: (prefix: string, invoiceDate: string) =>
     request<{ invNo: string }>(`/invoices/next-number?${new URLSearchParams({ prefix, invoiceDate })}`),
   listInvoices: (filters: InvoiceFilters) => request<InvoiceListItem[]>(`/invoices${queryString(filters)}`),
+  listInvoiceDrafts: () => request<InvoiceDraftListItem[]>("/invoices/drafts"),
   getInvoice: (invNo: string) => request<Invoice>(`/invoices/${encodeURIComponent(invNo)}`),
+  getInvoiceDraft: (draftId: string) => request<InvoiceDraft>(`/invoices/drafts/${encodeURIComponent(draftId)}`),
+  createInvoiceDraft: (payload: InvoicePayload) =>
+    request<InvoiceDraft>("/invoices/drafts", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateInvoiceDraft: (draftId: string, payload: InvoicePayload) =>
+    request<InvoiceDraft | Invoice>(`/invoices/drafts/${encodeURIComponent(draftId)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  deleteInvoiceDraft: (draftId: string) => request<void>(`/invoices/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE" }),
   createInvoice: (payload: InvoicePayload) =>
     request<Invoice>("/invoices", {
       method: "POST",
