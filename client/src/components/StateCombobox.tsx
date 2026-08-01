@@ -7,11 +7,17 @@ type StateComboboxProps = {
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  states?: readonly string[];
 };
 
 const normalizeSearch = (value: string) => value.trim().toLowerCase();
 
-export function StateCombobox({ value, onChange, required = false }: StateComboboxProps) {
+export function StateCombobox({
+  value,
+  onChange,
+  required = false,
+  states = indianStates,
+}: StateComboboxProps) {
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(value);
@@ -24,12 +30,17 @@ export function StateCombobox({ value, onChange, required = false }: StateCombob
   const filteredStates = useMemo(() => {
     const normalizedQuery = normalizeSearch(query);
     if (!normalizedQuery) {
-      return indianStates;
+      return states;
     }
 
-    return indianStates.filter((state) => normalizeSearch(state).includes(normalizedQuery));
-  }, [query]);
-  const selectedState = useMemo(() => findIndianState(value), [value]);
+    return states.filter((state) =>
+      normalizeSearch(state).includes(normalizedQuery),
+    );
+  }, [query, states]);
+  const selectedState = useMemo(
+    () => findIndianState(value, states),
+    [states, value],
+  );
   const hasQuery = query.trim().length > 0;
 
   const selectState = (state: string) => {
@@ -57,7 +68,7 @@ export function StateCombobox({ value, onChange, required = false }: StateCombob
       return;
     }
 
-    const exactState = findIndianState(query);
+    const exactState = findIndianState(query, states);
     if (exactState) {
       selectState(exactState);
       return;
@@ -136,7 +147,9 @@ export function StateCombobox({ value, onChange, required = false }: StateCombob
                 }}
               >
                 <span>{state}</span>
-                {selectedState === state ? <Check size={14} aria-hidden="true" /> : null}
+                {selectedState === state ? (
+                  <Check size={14} aria-hidden="true" />
+                ) : null}
               </button>
             ))
           ) : (

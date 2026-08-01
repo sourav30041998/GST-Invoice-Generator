@@ -12,7 +12,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { emptyLineItem, taxPresets } from "../constants";
-import { findIndianState } from "../data/indianStates";
+import { findIndianState, indianStates } from "../data/indianStates";
 import { StateCombobox } from "./StateCombobox";
 import type {
   AdjustmentInput,
@@ -169,6 +169,8 @@ export function InvoiceForm({
   );
   const [activeTab, setActiveTab] = useState<InvoiceFormTab>("details");
   const [backConfirmOpen, setBackConfirmOpen] = useState(false);
+  const [stateOptions, setStateOptions] =
+    useState<readonly string[]>(indianStates);
   const [saving, setSaving] = useState(false);
 
   const totals = useMemo(
@@ -184,6 +186,21 @@ export function InvoiceForm({
     setStatusVisible(false);
     setLastSavedSnapshot(null);
     setActiveTab("details");
+  }, []);
+
+  useEffect(() => {
+    const loadIndianStates = async () => {
+      try {
+        const states = await api.listIndianStates();
+        if (states.length) {
+          setStateOptions(states);
+        }
+      } catch {
+        setStateOptions(indianStates);
+      }
+    };
+
+    void loadIndianStates();
   }, []);
 
   useEffect(() => {
@@ -342,7 +359,7 @@ export function InvoiceForm({
       return;
     }
 
-    const selectedState = findIndianState(form.partyState);
+    const selectedState = findIndianState(form.partyState, stateOptions);
     if (!selectedState) {
       setActiveTab("details");
       showToast("Please select a valid Indian state.");
@@ -574,6 +591,7 @@ export function InvoiceForm({
                 <StateCombobox
                   value={form.partyState}
                   onChange={(value) => updateForm("partyState", value)}
+                  states={stateOptions}
                   required
                 />
               </div>

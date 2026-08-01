@@ -17,22 +17,23 @@ const lineItemSchema = new Schema(
     sgstAmount: { type: Number, default: 0 },
     igstAmount: { type: Number, default: 0 },
     taxTotal: { type: Number, default: 0 },
-    total: { type: Number, default: 0 }
+    total: { type: Number, default: 0 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const adjustmentSchema = new Schema(
   {
     desc: { type: String, default: "" },
     amount: { type: Number, required: true, min: 0 },
-    type: { type: String, enum: ["add", "deduct"], default: "add" }
+    type: { type: String, enum: ["add", "deduct"], default: "add" },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const invoiceDraftSchema = new Schema(
   {
+    businessProfileId: { type: Schema.Types.ObjectId, ref: "BusinessProfile" },
     invDate: { type: String, required: true },
     checkinDate: { type: String, default: "" },
     checkoutDate: { type: String, default: "" },
@@ -43,7 +44,12 @@ const invoiceDraftSchema = new Schema(
     partyState: { type: String, default: "" },
     groupName: { type: String, default: "" },
     roomNo: { type: String, default: "" },
-    workflowStatus: { type: String, enum: ["draft"], default: "draft", index: true },
+    workflowStatus: {
+      type: String,
+      enum: ["draft"],
+      default: "draft",
+      index: true,
+    },
     lineItems: { type: [lineItemSchema], default: [] },
     adjustments: { type: [adjustmentSchema], default: [] },
     totalTaxable: { type: Number, default: 0 },
@@ -54,11 +60,19 @@ const invoiceDraftSchema = new Schema(
     addTotal: { type: Number, default: 0 },
     deductTotal: { type: Number, default: 0 },
     netTotal: { type: Number, default: 0 },
-    presetSnapshot: { type: Schema.Types.Mixed, required: true }
+    presetSnapshot: { type: Schema.Types.Mixed, required: true },
+    businessSnapshot: { type: Schema.Types.Mixed, required: true },
+    createdBy: { type: String, default: "system", trim: true },
   },
-  { timestamps: true, minimize: false }
+  { timestamps: true, minimize: false },
 );
 
 invoiceDraftSchema.index({ createdAt: -1 });
+invoiceDraftSchema.index({ workflowStatus: 1, createdAt: -1 });
+invoiceDraftSchema.index({
+  partyName: "text",
+  roomNo: "text",
+  confirmNo: "text",
+});
 
 export const InvoiceDraftModel = model("InvoiceDraft", invoiceDraftSchema);

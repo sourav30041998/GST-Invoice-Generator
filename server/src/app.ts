@@ -8,6 +8,7 @@ import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { notFound } from "./middleware/notFound.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
+import referenceDataRoutes from "./routes/referenceDataRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 
 export const app = express();
@@ -16,8 +17,8 @@ app.use(helmet());
 app.use(
   cors({
     origin: env.CLIENT_ORIGIN,
-    credentials: true
-  })
+    credentials: true,
+  }),
 );
 app.use(compression());
 app.use(express.json({ limit: "6mb" }));
@@ -28,14 +29,15 @@ app.use(
     windowMs: 60 * 1000,
     limit: 240,
     standardHeaders: true,
-    legacyHeaders: false
-  })
+    legacyHeaders: false,
+  }),
 );
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "gst-invoice-api" });
 });
 
+app.use("/api/reference-data", referenceDataRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/invoices", invoiceRoutes);
 

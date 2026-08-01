@@ -17,23 +17,34 @@ const lineItemSchema = new Schema(
     sgstAmount: { type: Number, default: 0 },
     igstAmount: { type: Number, default: 0 },
     taxTotal: { type: Number, default: 0 },
-    total: { type: Number, default: 0 }
+    total: { type: Number, default: 0 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const adjustmentSchema = new Schema(
   {
     desc: { type: String, default: "" },
     amount: { type: Number, required: true, min: 0 },
-    type: { type: String, enum: ["add", "deduct"], default: "add" }
+    type: { type: String, enum: ["add", "deduct"], default: "add" },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const invoiceSchema = new Schema(
   {
     invNo: { type: String, required: true, unique: true, trim: true },
+    invoicePrefix: {
+      type: String,
+      default: "",
+      trim: true,
+      uppercase: true,
+      index: true,
+    },
+    invoiceMonth: { type: String, default: "", trim: true, index: true },
+    sequenceNo: { type: Number, min: 1 },
+    sourceDraftId: { type: Schema.Types.ObjectId, ref: "InvoiceDraft" },
+    businessProfileId: { type: Schema.Types.ObjectId, ref: "BusinessProfile" },
     invDate: { type: String, required: true },
     checkinDate: { type: String, default: "" },
     checkoutDate: { type: String, default: "" },
@@ -44,7 +55,12 @@ const invoiceSchema = new Schema(
     partyState: { type: String, default: "" },
     groupName: { type: String, default: "" },
     roomNo: { type: String, default: "" },
-    workflowStatus: { type: String, enum: ["draft", "checkedIn", "checkedOut", "cancelled"], default: "checkedOut", index: true },
+    workflowStatus: {
+      type: String,
+      enum: ["draft", "checkedIn", "checkedOut", "cancelled"],
+      default: "checkedOut",
+      index: true,
+    },
     lineItems: { type: [lineItemSchema], default: [] },
     adjustments: { type: [adjustmentSchema], default: [] },
     totalTaxable: { type: Number, default: 0 },
@@ -55,15 +71,44 @@ const invoiceSchema = new Schema(
     addTotal: { type: Number, default: 0 },
     deductTotal: { type: Number, default: 0 },
     netTotal: { type: Number, default: 0 },
-    status: { type: String, enum: ["active", "cancelled"], default: "active", index: true },
+    status: {
+      type: String,
+      enum: ["active", "cancelled"],
+      default: "active",
+      index: true,
+    },
+    recordStatus: {
+      type: String,
+      enum: ["active", "cancelled"],
+      default: "active",
+      index: true,
+    },
     cancelledAt: { type: Date },
-    presetSnapshot: { type: Schema.Types.Mixed, required: true }
+    presetSnapshot: { type: Schema.Types.Mixed, required: true },
+    businessSnapshot: { type: Schema.Types.Mixed, required: true },
+    createdBy: { type: String, default: "system", trim: true },
   },
-  { timestamps: true, minimize: false }
+  { timestamps: true, minimize: false },
 );
 
 invoiceSchema.index({ invDate: -1 });
+invoiceSchema.index(
+  { invoicePrefix: 1, invoiceMonth: 1, sequenceNo: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      invoicePrefix: { $type: "string" },
+      invoiceMonth: { $type: "string" },
+      sequenceNo: { $type: "number" },
+    },
+  },
+);
 invoiceSchema.index({ workflowStatus: 1, createdAt: -1 });
-invoiceSchema.index({ partyName: "text", invNo: "text" });
+invoiceSchema.index({
+  partyName: "text",
+  invNo: "text",
+  roomNo: "text",
+  confirmNo: "text",
+});
 
 export const InvoiceModel = model("Invoice", invoiceSchema);

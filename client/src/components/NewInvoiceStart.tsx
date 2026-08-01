@@ -2,8 +2,8 @@ import { Check, ChevronDown, FilePlus2 } from "lucide-react";
 import { type FocusEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type {
-  InvoiceDraftListItem,
-  InvoiceListItem,
+  InvoiceWorkbenchRow,
+  InvoiceWorkbenchStatus,
   InvoiceWorkflowStatus,
 } from "../types";
 import { formatDateTime } from "../utils/dates";
@@ -16,21 +16,9 @@ type NewInvoiceStartProps = {
   showToast: (message: string) => void;
 };
 
-type InvoiceStatusView = "all" | InvoiceWorkflowStatus;
-
 type StatusView = {
-  key: InvoiceStatusView;
+  key: InvoiceWorkbenchStatus;
   label: string;
-};
-
-type InvoiceStatusRow = {
-  id: string;
-  invoiceNumber: string;
-  createdAt?: string;
-  workflowStatus: InvoiceWorkflowStatus;
-  source: "draft" | "invoice";
-  draftId?: string;
-  invNo?: string;
 };
 
 const statusViews: StatusView[] = [
@@ -41,59 +29,11 @@ const statusViews: StatusView[] = [
   { key: "cancelled", label: "Cancelled" },
 ];
 
-const defaultInvoiceFilters = {
-  from: "",
-  to: "",
-  gst: "",
-  status: "",
-  search: "",
-} as const;
-
-function invoiceWorkflowStatus(
-  invoice: InvoiceListItem,
-): InvoiceWorkflowStatus {
-  if (invoice.workflowStatus) {
-    return invoice.workflowStatus;
-  }
-
-  if (invoice.status === "cancelled") {
-    return "cancelled";
-  }
-
-  if (
-    invoice.status === "draft" ||
-    invoice.status === "checkedIn" ||
-    invoice.status === "checkedOut"
-  ) {
-    return invoice.status;
-  }
-
-  return "checkedOut";
-}
-
-function toInvoiceRows(
-  invoices: InvoiceListItem[],
-  drafts: InvoiceDraftListItem[],
-): InvoiceStatusRow[] {
-  const draftRows = drafts.map((draft) => ({
-    id: `draft-${draft._id}`,
-    invoiceNumber: "Not generated",
-    createdAt: draft.createdAt,
-    workflowStatus: draft.workflowStatus,
-    source: "draft" as const,
-    draftId: draft._id,
-  }));
-
-  const savedRows = invoices.map((invoice) => ({
-    id: `invoice-${invoice.invNo}`,
-    invoiceNumber: invoice.invNo,
-    createdAt: invoice.createdAt || invoice.invDate,
-    workflowStatus: invoiceWorkflowStatus(invoice),
-    source: "invoice" as const,
-    invNo: invoice.invNo,
-  }));
-
-  return [...draftRows, ...savedRows];
+function emptyStatusCounts() {
+  return statusViews.reduce(
+    (acc, view) => ({ ...acc, [view.key]: 0 }),
+    {} as Record<InvoiceWorkbenchStatus, number>,
+  );
 }
 
 export function NewInvoiceStart({
@@ -103,21 +43,24 @@ export function NewInvoiceStart({
   onOpenInvoice,
   showToast,
 }: NewInvoiceStartProps) {
-  const [activeStatus, setActiveStatus] = useState<InvoiceStatusView>("all");
+  const [activeStatus, setActiveStatus] =
+    useState<InvoiceWorkbenchStatus>("all");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
-  const [rows, setRows] = useState<InvoiceStatusRow[]>([]);
+  const [statusCounts, setStatusCounts] = useState<
+    Record<InvoiceWorkbenchStatus, number>
+  >(() => emptyStatusCounts());
+  const [rows, setRows] = useState<InvoiceWorkbenchRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadInvoices = async () => {
+  const loadInvoices = async (status = activeStatus) => {
     setLoading(true);
     try {
-      const [invoices, drafts] = await Promise.all([
-        api.listInvoices(defaultInvoiceFilters),
-        api.listInvoiceDrafts(),
-      ]);
-      setRows(toInvoiceRows(invoices, drafts));
+      const workbench = await api.listInvoiceWorkbench(status);
+      setRows(workbench.rows);
+      setStatusCounts({ ...emptyStatusCounts(), ...workbench.counts });
     } catch (error) {
-      setRows(toInvoiceRows([], []));
+      setRows([]);
+      setStatusCounts(emptyStatusCounts());
       showToast(
         error instanceof Error ? error.message : "Could not load invoices.",
       );
@@ -127,23 +70,9 @@ export function NewInvoiceStart({
   };
 
   useEffect(() => {
-    void loadInvoices();
+    void loadInvoices(activeStatus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
-
-  const statusCounts = useMemo(() => {
-    const counts = statusViews.reduce(
-      (acc, view) => ({ ...acc, [view.key]: 0 }),
-      {} as Record<InvoiceStatusView, number>,
-    );
-
-    rows.forEach((invoice) => {
-      counts.all += 1;
-      counts[invoice.workflowStatus] += 1;
-    });
-
-    return counts;
-  }, [rows]);
+  }, [refreshKey, activeStatus]);
 
   const selectedStatusView =
     statusViews.find((view) => view.key === activeStatus) || statusViews[0];
@@ -151,16 +80,9 @@ export function NewInvoiceStart({
     activeStatus === "all"
       ? "All Invoices"
       : `${selectedStatusView.label} Invoices`;
+  const visibleRows = useMemo(() => rows, [rows]);
 
-  const visibleRows = useMemo(() => {
-    if (activeStatus === "all") {
-      return rows;
-    }
-
-    return rows.filter((invoice) => invoice.workflowStatus === activeStatus);
-  }, [activeStatus, rows]);
-
-  const openInvoiceRow = (invoice: InvoiceStatusRow) => {
+  const openInvoiceRow = (invoice: InvoiceWorkbenchRow) => {
     if (invoice.source === "draft" && invoice.draftId) {
       onOpenDraft(invoice.draftId);
       return;
@@ -171,7 +93,7 @@ export function NewInvoiceStart({
     }
   };
 
-  const selectStatus = (status: InvoiceStatusView) => {
+  const selectStatus = (status: InvoiceWorkbenchStatus) => {
     setActiveStatus(status);
     setStatusMenuOpen(false);
   };

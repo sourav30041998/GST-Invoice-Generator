@@ -11,6 +11,7 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 client/.vite/
+.codex-dev/
 
 *.tsbuildinfo
 client/vite.config.js

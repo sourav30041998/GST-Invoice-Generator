@@ -22,8 +22,13 @@ export type Settings = {
   logoDataUrl: string | null;
 };
 
-export type InvoiceWorkflowStatus = "draft" | "checkedIn" | "checkedOut" | "cancelled";
-export type CreatableInvoiceWorkflowStatus = Exclude<InvoiceWorkflowStatus, "cancelled">;
+export type InvoiceWorkflowStatus =
+  "draft" | "checkedIn" | "checkedOut" | "cancelled";
+export type InvoiceWorkbenchStatus = "all" | InvoiceWorkflowStatus;
+export type CreatableInvoiceWorkflowStatus = Exclude<
+  InvoiceWorkflowStatus,
+  "cancelled"
+>;
 export type InvoiceRecordStatus = "active" | "cancelled";
 export type InvoiceFormSaveState = "saved" | "unsaved";
 
@@ -47,7 +52,10 @@ export type LineItemInput = {
   taxInclusive: boolean;
 };
 
-export type CalculatedLineItem = Omit<LineItemInput, "id" | "units" | "rate"> & {
+export type CalculatedLineItem = Omit<
+  LineItemInput,
+  "id" | "units" | "rate"
+> & {
   units: number;
   rate: number;
   taxable: number;
@@ -85,7 +93,10 @@ export type InvoicePayload = {
   adjustments: Omit<AdjustmentInput, "id">[];
 };
 
-type InvoiceRecordBase = Omit<InvoicePayload, "lineItems" | "adjustments" | "workflowStatus"> & {
+type InvoiceRecordBase = Omit<
+  InvoicePayload,
+  "lineItems" | "adjustments" | "workflowStatus"
+> & {
   _id?: string;
   lineItems: CalculatedLineItem[];
   adjustments: Adjustment[];
@@ -142,6 +153,21 @@ export type InvoiceDraftListItem = {
   workflowStatus: "draft";
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type InvoiceWorkbenchRow = {
+  id: string;
+  invoiceNumber: string;
+  createdAt?: string;
+  workflowStatus: InvoiceWorkflowStatus;
+  source: "draft" | "invoice";
+  draftId?: string;
+  invNo?: string;
+};
+
+export type InvoiceWorkbenchResponse = {
+  counts: Record<InvoiceWorkbenchStatus, number>;
+  rows: InvoiceWorkbenchRow[];
 };
 
 export type InvoiceFilters = {

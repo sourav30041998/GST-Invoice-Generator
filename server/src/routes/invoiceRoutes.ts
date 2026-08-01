@@ -9,9 +9,10 @@ import {
   getInvoiceRecord,
   listInvoiceDraftRecords,
   listInvoiceRecords,
+  listInvoiceWorkbenchRecords,
   nextInvoiceNumber,
   updateInvoiceDraftRecord,
-  updateInvoiceRecord
+  updateInvoiceRecord,
 } from "../controllers/invoiceController.js";
 
 const router = Router();
@@ -19,6 +20,7 @@ const router = Router();
 router.get("/", listInvoiceRecords);
 router.get("/next-number", nextInvoiceNumber);
 router.get("/export.csv", exportInvoiceRecords);
+router.get("/workbench", listInvoiceWorkbenchRecords);
 router.get("/drafts", listInvoiceDraftRecords);
 router.post("/drafts", createInvoiceDraftRecord);
 router.get("/drafts/:draftId", getInvoiceDraftRecord);
