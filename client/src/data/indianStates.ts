@@ -35,12 +35,25 @@ export const indianStates = [
   "Tripura",
   "Uttar Pradesh",
   "Uttarakhand",
+<<<<<<< HEAD
   "West Bengal"
+=======
+  "West Bengal",
+>>>>>>> codex/backend-api-data
 ] as const;
 
 const normalizeState = (value: string) => value.trim().toLowerCase();
 
+<<<<<<< HEAD
 export function findIndianState(value: string) {
   const normalizedValue = normalizeState(value);
   return indianStates.find((state) => normalizeState(state) === normalizedValue);
+=======
+export function findIndianState(
+  value: string,
+  states: readonly string[] = indianStates,
+) {
+  const normalizedValue = normalizeState(value);
+  return states.find((state) => normalizeState(state) === normalizedValue);
+>>>>>>> codex/backend-api-data
 }

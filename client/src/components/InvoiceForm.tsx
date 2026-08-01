@@ -12,7 +12,11 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { emptyLineItem, taxPresets } from "../constants";
+<<<<<<< HEAD
 import { findIndianState } from "../data/indianStates";
+=======
+import { findIndianState, indianStates } from "../data/indianStates";
+>>>>>>> codex/backend-api-data
 import { StateCombobox } from "./StateCombobox";
 import type {
   AdjustmentInput,
@@ -169,6 +173,11 @@ export function InvoiceForm({
   );
   const [activeTab, setActiveTab] = useState<InvoiceFormTab>("details");
   const [backConfirmOpen, setBackConfirmOpen] = useState(false);
+<<<<<<< HEAD
+=======
+  const [stateOptions, setStateOptions] =
+    useState<readonly string[]>(indianStates);
+>>>>>>> codex/backend-api-data
   const [saving, setSaving] = useState(false);
 
   const totals = useMemo(
@@ -187,6 +196,24 @@ export function InvoiceForm({
   }, []);
 
   useEffect(() => {
+<<<<<<< HEAD
+=======
+    const loadIndianStates = async () => {
+      try {
+        const states = await api.listIndianStates();
+        if (states.length) {
+          setStateOptions(states);
+        }
+      } catch {
+        setStateOptions(indianStates);
+      }
+    };
+
+    void loadIndianStates();
+  }, []);
+
+  useEffect(() => {
+>>>>>>> codex/backend-api-data
     onInvoiceDateChange(form.invDate);
   }, [form.invDate, onInvoiceDateChange]);
 
@@ -342,7 +369,11 @@ export function InvoiceForm({
       return;
     }
 
+<<<<<<< HEAD
     const selectedState = findIndianState(form.partyState);
+=======
+    const selectedState = findIndianState(form.partyState, stateOptions);
+>>>>>>> codex/backend-api-data
     if (!selectedState) {
       setActiveTab("details");
       showToast("Please select a valid Indian state.");
@@ -574,6 +605,10 @@ export function InvoiceForm({
                 <StateCombobox
                   value={form.partyState}
                   onChange={(value) => updateForm("partyState", value)}
+<<<<<<< HEAD
+=======
+                  states={stateOptions}
+>>>>>>> codex/backend-api-data
                   required
                 />
               </div>

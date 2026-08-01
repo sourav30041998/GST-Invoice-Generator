@@ -7,11 +7,24 @@ type StateComboboxProps = {
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+<<<<<<< HEAD
+=======
+  states?: readonly string[];
+>>>>>>> codex/backend-api-data
 };
 
 const normalizeSearch = (value: string) => value.trim().toLowerCase();
 
+<<<<<<< HEAD
 export function StateCombobox({ value, onChange, required = false }: StateComboboxProps) {
+=======
+export function StateCombobox({
+  value,
+  onChange,
+  required = false,
+  states = indianStates,
+}: StateComboboxProps) {
+>>>>>>> codex/backend-api-data
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(value);
@@ -24,12 +37,26 @@ export function StateCombobox({ value, onChange, required = false }: StateCombob
   const filteredStates = useMemo(() => {
     const normalizedQuery = normalizeSearch(query);
     if (!normalizedQuery) {
+<<<<<<< HEAD
       return indianStates;
     }
 
     return indianStates.filter((state) => normalizeSearch(state).includes(normalizedQuery));
   }, [query]);
   const selectedState = useMemo(() => findIndianState(value), [value]);
+=======
+      return states;
+    }
+
+    return states.filter((state) =>
+      normalizeSearch(state).includes(normalizedQuery),
+    );
+  }, [query, states]);
+  const selectedState = useMemo(
+    () => findIndianState(value, states),
+    [states, value],
+  );
+>>>>>>> codex/backend-api-data
   const hasQuery = query.trim().length > 0;
 
   const selectState = (state: string) => {
@@ -57,7 +84,11 @@ export function StateCombobox({ value, onChange, required = false }: StateCombob
       return;
     }
 
+<<<<<<< HEAD
     const exactState = findIndianState(query);
+=======
+    const exactState = findIndianState(query, states);
+>>>>>>> codex/backend-api-data
     if (exactState) {
       selectState(exactState);
       return;
@@ -136,7 +167,13 @@ export function StateCombobox({ value, onChange, required = false }: StateCombob
                 }}
               >
                 <span>{state}</span>
+<<<<<<< HEAD
                 {selectedState === state ? <Check size={14} aria-hidden="true" /> : null}
+=======
+                {selectedState === state ? (
+                  <Check size={14} aria-hidden="true" />
+                ) : null}
+>>>>>>> codex/backend-api-data
               </button>
             ))
           ) : (

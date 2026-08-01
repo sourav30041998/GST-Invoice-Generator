@@ -22,8 +22,18 @@ export type Settings = {
   logoDataUrl: string | null;
 };
 
+<<<<<<< HEAD
 export type InvoiceWorkflowStatus = "draft" | "checkedIn" | "checkedOut" | "cancelled";
 export type CreatableInvoiceWorkflowStatus = Exclude<InvoiceWorkflowStatus, "cancelled">;
+=======
+export type InvoiceWorkflowStatus =
+  "draft" | "checkedIn" | "checkedOut" | "cancelled";
+export type InvoiceWorkbenchStatus = "all" | InvoiceWorkflowStatus;
+export type CreatableInvoiceWorkflowStatus = Exclude<
+  InvoiceWorkflowStatus,
+  "cancelled"
+>;
+>>>>>>> codex/backend-api-data
 export type InvoiceRecordStatus = "active" | "cancelled";
 export type InvoiceFormSaveState = "saved" | "unsaved";
 
@@ -47,7 +57,14 @@ export type LineItemInput = {
   taxInclusive: boolean;
 };
 
+<<<<<<< HEAD
 export type CalculatedLineItem = Omit<LineItemInput, "id" | "units" | "rate"> & {
+=======
+export type CalculatedLineItem = Omit<
+  LineItemInput,
+  "id" | "units" | "rate"
+> & {
+>>>>>>> codex/backend-api-data
   units: number;
   rate: number;
   taxable: number;
@@ -85,7 +102,14 @@ export type InvoicePayload = {
   adjustments: Omit<AdjustmentInput, "id">[];
 };
 
+<<<<<<< HEAD
 type InvoiceRecordBase = Omit<InvoicePayload, "lineItems" | "adjustments" | "workflowStatus"> & {
+=======
+type InvoiceRecordBase = Omit<
+  InvoicePayload,
+  "lineItems" | "adjustments" | "workflowStatus"
+> & {
+>>>>>>> codex/backend-api-data
   _id?: string;
   lineItems: CalculatedLineItem[];
   adjustments: Adjustment[];
@@ -144,6 +168,24 @@ export type InvoiceDraftListItem = {
   updatedAt?: string;
 };
 
+<<<<<<< HEAD
+=======
+export type InvoiceWorkbenchRow = {
+  id: string;
+  invoiceNumber: string;
+  createdAt?: string;
+  workflowStatus: InvoiceWorkflowStatus;
+  source: "draft" | "invoice";
+  draftId?: string;
+  invNo?: string;
+};
+
+export type InvoiceWorkbenchResponse = {
+  counts: Record<InvoiceWorkbenchStatus, number>;
+  rows: InvoiceWorkbenchRow[];
+};
+
+>>>>>>> codex/backend-api-data
 export type InvoiceFilters = {
   from: string;
   to: string;
@@ -151,4 +193,8 @@ export type InvoiceFilters = {
   status: "" | "active" | "cancelled";
   workflowStatus?: "" | InvoiceWorkflowStatus;
   search: string;
+<<<<<<< HEAD
 };
+=======
+};
+>>>>>>> codex/backend-api-data

@@ -2,8 +2,13 @@ import { Check, ChevronDown, FilePlus2 } from "lucide-react";
 import { type FocusEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type {
+<<<<<<< HEAD
   InvoiceDraftListItem,
   InvoiceListItem,
+=======
+  InvoiceWorkbenchRow,
+  InvoiceWorkbenchStatus,
+>>>>>>> codex/backend-api-data
   InvoiceWorkflowStatus,
 } from "../types";
 import { formatDateTime } from "../utils/dates";
@@ -16,6 +21,7 @@ type NewInvoiceStartProps = {
   showToast: (message: string) => void;
 };
 
+<<<<<<< HEAD
 type InvoiceStatusView = "all" | InvoiceWorkflowStatus;
 
 type StatusView = {
@@ -33,6 +39,13 @@ type InvoiceStatusRow = {
   invNo?: string;
 };
 
+=======
+type StatusView = {
+  key: InvoiceWorkbenchStatus;
+  label: string;
+};
+
+>>>>>>> codex/backend-api-data
 const statusViews: StatusView[] = [
   { key: "all", label: "All" },
   { key: "draft", label: "Draft" },
@@ -41,6 +54,7 @@ const statusViews: StatusView[] = [
   { key: "cancelled", label: "Cancelled" },
 ];
 
+<<<<<<< HEAD
 const defaultInvoiceFilters = {
   from: "",
   to: "",
@@ -94,6 +108,13 @@ function toInvoiceRows(
   }));
 
   return [...draftRows, ...savedRows];
+=======
+function emptyStatusCounts() {
+  return statusViews.reduce(
+    (acc, view) => ({ ...acc, [view.key]: 0 }),
+    {} as Record<InvoiceWorkbenchStatus, number>,
+  );
+>>>>>>> codex/backend-api-data
 }
 
 export function NewInvoiceStart({
@@ -103,6 +124,7 @@ export function NewInvoiceStart({
   onOpenInvoice,
   showToast,
 }: NewInvoiceStartProps) {
+<<<<<<< HEAD
   const [activeStatus, setActiveStatus] = useState<InvoiceStatusView>("all");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [rows, setRows] = useState<InvoiceStatusRow[]>([]);
@@ -118,6 +140,26 @@ export function NewInvoiceStart({
       setRows(toInvoiceRows(invoices, drafts));
     } catch (error) {
       setRows(toInvoiceRows([], []));
+=======
+  const [activeStatus, setActiveStatus] =
+    useState<InvoiceWorkbenchStatus>("all");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [statusCounts, setStatusCounts] = useState<
+    Record<InvoiceWorkbenchStatus, number>
+  >(() => emptyStatusCounts());
+  const [rows, setRows] = useState<InvoiceWorkbenchRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadInvoices = async (status = activeStatus) => {
+    setLoading(true);
+    try {
+      const workbench = await api.listInvoiceWorkbench(status);
+      setRows(workbench.rows);
+      setStatusCounts({ ...emptyStatusCounts(), ...workbench.counts });
+    } catch (error) {
+      setRows([]);
+      setStatusCounts(emptyStatusCounts());
+>>>>>>> codex/backend-api-data
       showToast(
         error instanceof Error ? error.message : "Could not load invoices.",
       );
@@ -127,6 +169,7 @@ export function NewInvoiceStart({
   };
 
   useEffect(() => {
+<<<<<<< HEAD
     void loadInvoices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
@@ -144,6 +187,11 @@ export function NewInvoiceStart({
 
     return counts;
   }, [rows]);
+=======
+    void loadInvoices(activeStatus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey, activeStatus]);
+>>>>>>> codex/backend-api-data
 
   const selectedStatusView =
     statusViews.find((view) => view.key === activeStatus) || statusViews[0];
@@ -151,6 +199,7 @@ export function NewInvoiceStart({
     activeStatus === "all"
       ? "All Invoices"
       : `${selectedStatusView.label} Invoices`;
+<<<<<<< HEAD
 
   const visibleRows = useMemo(() => {
     if (activeStatus === "all") {
@@ -161,6 +210,11 @@ export function NewInvoiceStart({
   }, [activeStatus, rows]);
 
   const openInvoiceRow = (invoice: InvoiceStatusRow) => {
+=======
+  const visibleRows = useMemo(() => rows, [rows]);
+
+  const openInvoiceRow = (invoice: InvoiceWorkbenchRow) => {
+>>>>>>> codex/backend-api-data
     if (invoice.source === "draft" && invoice.draftId) {
       onOpenDraft(invoice.draftId);
       return;
@@ -171,7 +225,11 @@ export function NewInvoiceStart({
     }
   };
 
+<<<<<<< HEAD
   const selectStatus = (status: InvoiceStatusView) => {
+=======
+  const selectStatus = (status: InvoiceWorkbenchStatus) => {
+>>>>>>> codex/backend-api-data
     setActiveStatus(status);
     setStatusMenuOpen(false);
   };

@@ -1,6 +1,28 @@
 import { z } from "zod";
+<<<<<<< HEAD
 export const invoiceWorkflowStatusSchema = z.enum(["draft", "checkedIn", "checkedOut"]);
 export const invoiceWorkflowQueryStatusSchema = z.enum(["", "draft", "checkedIn", "checkedOut", "cancelled"]);
+=======
+export const invoiceWorkflowStatusSchema = z.enum([
+  "draft",
+  "checkedIn",
+  "checkedOut",
+]);
+export const invoiceWorkflowQueryStatusSchema = z.enum([
+  "",
+  "draft",
+  "checkedIn",
+  "checkedOut",
+  "cancelled",
+]);
+export const invoiceWorkbenchStatusSchema = z.enum([
+  "all",
+  "draft",
+  "checkedIn",
+  "checkedOut",
+  "cancelled",
+]);
+>>>>>>> codex/backend-api-data
 
 export const presetSchema = z.object({
   business_name: z.string().trim().min(1).max(120),
@@ -24,7 +46,11 @@ export const presetSchema = z.object({
   bank_name: z.string().trim().max(160).optional().default(""),
   bank_account: z.string().trim().max(40).optional().default(""),
   bank_ifsc: z.string().trim().max(20).optional().default(""),
+<<<<<<< HEAD
   terms: z.string().trim().max(700).optional().default("")
+=======
+  terms: z.string().trim().max(700).optional().default(""),
+>>>>>>> codex/backend-api-data
 });
 
 export const lineItemSchema = z.object({
@@ -37,13 +63,21 @@ export const lineItemSchema = z.object({
   cgstRate: z.coerce.number().min(0).max(100).optional().default(0),
   sgstRate: z.coerce.number().min(0).max(100).optional().default(0),
   igstRate: z.coerce.number().min(0).max(100).optional().default(0),
+<<<<<<< HEAD
   taxInclusive: z.coerce.boolean().optional().default(false)
+=======
+  taxInclusive: z.coerce.boolean().optional().default(false),
+>>>>>>> codex/backend-api-data
 });
 
 export const adjustmentSchema = z.object({
   desc: z.string().trim().max(180).optional().default(""),
   amount: z.coerce.number().min(0).max(100000000),
+<<<<<<< HEAD
   type: z.enum(["add", "deduct"]).optional().default("add")
+=======
+  type: z.enum(["add", "deduct"]).optional().default("add"),
+>>>>>>> codex/backend-api-data
 });
 
 export const invoicePayloadSchema = z.object({
@@ -59,7 +93,11 @@ export const invoicePayloadSchema = z.object({
   roomNo: z.string().trim().min(1, "Room no. is required").max(80),
   workflowStatus: invoiceWorkflowStatusSchema.optional().default("checkedOut"),
   lineItems: z.array(lineItemSchema).min(1),
+<<<<<<< HEAD
   adjustments: z.array(adjustmentSchema).optional().default([])
+=======
+  adjustments: z.array(adjustmentSchema).optional().default([]),
+>>>>>>> codex/backend-api-data
 });
 
 export const invoiceQuerySchema = z.object({
@@ -68,7 +106,15 @@ export const invoiceQuerySchema = z.object({
   gst: z.enum(["", "yes", "no"]).optional().default(""),
   status: z.enum(["", "active", "cancelled"]).optional().default(""),
   workflowStatus: invoiceWorkflowQueryStatusSchema.optional().default(""),
+<<<<<<< HEAD
   search: z.string().trim().optional().default("")
+=======
+  search: z.string().trim().optional().default(""),
+});
+
+export const invoiceWorkbenchQuerySchema = z.object({
+  status: invoiceWorkbenchStatusSchema.optional().default("all"),
+>>>>>>> codex/backend-api-data
 });
 
 export const logoSchema = z.object({
@@ -76,9 +122,20 @@ export const logoSchema = z.object({
     .string()
     .min(20)
     .max(5_000_000)
+<<<<<<< HEAD
     .regex(/^data:image\/(png|jpe?g|webp);base64,/i, "Logo must be a PNG, JPG, or WebP data URL")
+=======
+    .regex(
+      /^data:image\/(png|jpe?g|webp);base64,/i,
+      "Logo must be a PNG, JPG, or WebP data URL",
+    ),
+>>>>>>> codex/backend-api-data
 });
 
 export type InvoicePayload = z.infer<typeof invoicePayloadSchema>;
 export type InvoiceQuery = z.infer<typeof invoiceQuerySchema>;
+<<<<<<< HEAD
+=======
+export type InvoiceWorkbenchQuery = z.infer<typeof invoiceWorkbenchQuerySchema>;
+>>>>>>> codex/backend-api-data
 export type PresetPayload = z.infer<typeof presetSchema>;
