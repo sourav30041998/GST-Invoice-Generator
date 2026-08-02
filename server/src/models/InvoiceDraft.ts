@@ -17,38 +17,23 @@ const lineItemSchema = new Schema(
     sgstAmount: { type: Number, default: 0 },
     igstAmount: { type: Number, default: 0 },
     taxTotal: { type: Number, default: 0 },
-<<<<<<< HEAD
-    total: { type: Number, default: 0 }
-  },
-  { _id: false }
-=======
     total: { type: Number, default: 0 },
   },
   { _id: false },
->>>>>>> codex/backend-api-data
 );
 
 const adjustmentSchema = new Schema(
   {
     desc: { type: String, default: "" },
     amount: { type: Number, required: true, min: 0 },
-<<<<<<< HEAD
-    type: { type: String, enum: ["add", "deduct"], default: "add" }
-  },
-  { _id: false }
-=======
     type: { type: String, enum: ["add", "deduct"], default: "add" },
   },
   { _id: false },
->>>>>>> codex/backend-api-data
 );
 
 const invoiceDraftSchema = new Schema(
   {
-<<<<<<< HEAD
-=======
     businessProfileId: { type: Schema.Types.ObjectId, ref: "BusinessProfile" },
->>>>>>> codex/backend-api-data
     invDate: { type: String, required: true },
     checkinDate: { type: String, default: "" },
     checkoutDate: { type: String, default: "" },
@@ -59,16 +44,12 @@ const invoiceDraftSchema = new Schema(
     partyState: { type: String, default: "" },
     groupName: { type: String, default: "" },
     roomNo: { type: String, default: "" },
-<<<<<<< HEAD
-    workflowStatus: { type: String, enum: ["draft"], default: "draft", index: true },
-=======
     workflowStatus: {
       type: String,
       enum: ["draft"],
       default: "draft",
       index: true,
     },
->>>>>>> codex/backend-api-data
     lineItems: { type: [lineItemSchema], default: [] },
     adjustments: { type: [adjustmentSchema], default: [] },
     totalTaxable: { type: Number, default: 0 },
@@ -79,14 +60,6 @@ const invoiceDraftSchema = new Schema(
     addTotal: { type: Number, default: 0 },
     deductTotal: { type: Number, default: 0 },
     netTotal: { type: Number, default: 0 },
-<<<<<<< HEAD
-    presetSnapshot: { type: Schema.Types.Mixed, required: true }
-  },
-  { timestamps: true, minimize: false }
-);
-
-invoiceDraftSchema.index({ createdAt: -1 });
-=======
     presetSnapshot: { type: Schema.Types.Mixed, required: true },
     businessSnapshot: { type: Schema.Types.Mixed, required: true },
     createdBy: { type: String, default: "system", trim: true },
@@ -101,6 +74,5 @@ invoiceDraftSchema.index({
   roomNo: "text",
   confirmNo: "text",
 });
->>>>>>> codex/backend-api-data
 
 export const InvoiceDraftModel = model("InvoiceDraft", invoiceDraftSchema);

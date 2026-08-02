@@ -1,10 +1,5 @@
 # GST Invoice Generator
 
-<<<<<<< HEAD
-Complete web application to create, manage, and track business GST invoices.
-
-=======
->>>>>>> codex/backend-api-data
 A full-stack GST invoicing application for hospitality billing. The UI preserves the original single-page invoice generator experience while moving invoices, settings, counters, and logo metadata into MongoDB through a Node.js and Express API.
 
 ## Stack
@@ -35,7 +30,6 @@ Backend runs on `http://localhost:5050`.
 
 ## Branching Strategy
 
-<<<<<<< HEAD
 - `main` remains the stable integration branch.
 - Feature work uses `codex/<short-feature-name>`.
 - Production fixes should use `hotfix/<short-fix-name>`.
@@ -44,13 +38,3 @@ Backend runs on `http://localhost:5050`.
 ## GST Rate Notes
 
 The default hotel accommodation presets follow the official GST position identified during the migration: hotel accommodation up to Rs. 7,500 per unit per day is 12%, and above Rs. 7,500 is 18%. Restaurant and non-specified outdoor catering defaults are 5%. Confirm rates with a tax professional before production use.
-=======
-- `master` remains the stable integration branch.
-- Feature work uses `codex/<short-feature-name>`.
-- Production fixes should use `hotfix/<short-fix-name>`.
-- Work is reviewed through pull requests before merging into `master`.
-
-## GST Rate Notes
-
-The default hotel accommodation presets follow the official GST position identified during the migration: hotel accommodation up to Rs. 7,500 per unit per day is 12%, and above Rs. 7,500 is 18%. Restaurant and non-specified outdoor catering defaults are 5%. Confirm rates with a tax professional before production use.
->>>>>>> codex/backend-api-data

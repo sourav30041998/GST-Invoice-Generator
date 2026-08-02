@@ -17,37 +17,23 @@ const lineItemSchema = new Schema(
     sgstAmount: { type: Number, default: 0 },
     igstAmount: { type: Number, default: 0 },
     taxTotal: { type: Number, default: 0 },
-<<<<<<< HEAD
-    total: { type: Number, default: 0 }
-  },
-  { _id: false }
-=======
     total: { type: Number, default: 0 },
   },
   { _id: false },
->>>>>>> codex/backend-api-data
 );
 
 const adjustmentSchema = new Schema(
   {
     desc: { type: String, default: "" },
     amount: { type: Number, required: true, min: 0 },
-<<<<<<< HEAD
-    type: { type: String, enum: ["add", "deduct"], default: "add" }
-  },
-  { _id: false }
-=======
     type: { type: String, enum: ["add", "deduct"], default: "add" },
   },
   { _id: false },
->>>>>>> codex/backend-api-data
 );
 
 const invoiceSchema = new Schema(
   {
     invNo: { type: String, required: true, unique: true, trim: true },
-<<<<<<< HEAD
-=======
     invoicePrefix: {
       type: String,
       default: "",
@@ -59,7 +45,6 @@ const invoiceSchema = new Schema(
     sequenceNo: { type: Number, min: 1 },
     sourceDraftId: { type: Schema.Types.ObjectId, ref: "InvoiceDraft" },
     businessProfileId: { type: Schema.Types.ObjectId, ref: "BusinessProfile" },
->>>>>>> codex/backend-api-data
     invDate: { type: String, required: true },
     checkinDate: { type: String, default: "" },
     checkoutDate: { type: String, default: "" },
@@ -70,16 +55,12 @@ const invoiceSchema = new Schema(
     partyState: { type: String, default: "" },
     groupName: { type: String, default: "" },
     roomNo: { type: String, default: "" },
-<<<<<<< HEAD
-    workflowStatus: { type: String, enum: ["draft", "checkedIn", "checkedOut", "cancelled"], default: "checkedOut", index: true },
-=======
     workflowStatus: {
       type: String,
       enum: ["draft", "checkedIn", "checkedOut", "cancelled"],
       default: "checkedOut",
       index: true,
     },
->>>>>>> codex/backend-api-data
     lineItems: { type: [lineItemSchema], default: [] },
     adjustments: { type: [adjustmentSchema], default: [] },
     totalTaxable: { type: Number, default: 0 },
@@ -90,18 +71,6 @@ const invoiceSchema = new Schema(
     addTotal: { type: Number, default: 0 },
     deductTotal: { type: Number, default: 0 },
     netTotal: { type: Number, default: 0 },
-<<<<<<< HEAD
-    status: { type: String, enum: ["active", "cancelled"], default: "active", index: true },
-    cancelledAt: { type: Date },
-    presetSnapshot: { type: Schema.Types.Mixed, required: true }
-  },
-  { timestamps: true, minimize: false }
-);
-
-invoiceSchema.index({ invDate: -1 });
-invoiceSchema.index({ workflowStatus: 1, createdAt: -1 });
-invoiceSchema.index({ partyName: "text", invNo: "text" });
-=======
     status: {
       type: String,
       enum: ["active", "cancelled"],
@@ -141,6 +110,5 @@ invoiceSchema.index({
   roomNo: "text",
   confirmNo: "text",
 });
->>>>>>> codex/backend-api-data
 
 export const InvoiceModel = model("Invoice", invoiceSchema);

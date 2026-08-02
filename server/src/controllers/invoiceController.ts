@@ -9,14 +9,6 @@ import {
   getInvoiceDraft,
   listInvoiceDrafts,
   listInvoices,
-<<<<<<< HEAD
-  peekInvoiceNumber,
-  updateInvoice,
-  updateInvoiceDraft
-} from "../services/invoiceService.js";
-import { getPreset } from "../services/settingsService.js";
-import { invoicePayloadSchema, invoiceQuerySchema } from "../validation/invoiceSchemas.js";
-=======
   listInvoiceWorkbench,
   peekInvoiceNumber,
   updateInvoice,
@@ -28,20 +20,15 @@ import {
   invoiceQuerySchema,
   invoiceWorkbenchQuerySchema,
 } from "../validation/invoiceSchemas.js";
->>>>>>> codex/backend-api-data
 
 export const nextInvoiceNumber: RequestHandler = async (req, res, next) => {
   try {
     const preset = await getPreset();
     const prefix = String(req.query.prefix || preset.invoice_prefix || "INV");
-<<<<<<< HEAD
-    const invoiceDate = typeof req.query.invoiceDate === "string" ? req.query.invoiceDate : undefined;
-=======
     const invoiceDate =
       typeof req.query.invoiceDate === "string"
         ? req.query.invoiceDate
         : undefined;
->>>>>>> codex/backend-api-data
     res.json({ invNo: await peekInvoiceNumber(prefix, invoiceDate) });
   } catch (error) {
     next(error);
@@ -58,15 +45,11 @@ export const createInvoiceRecord: RequestHandler = async (req, res, next) => {
   }
 };
 
-<<<<<<< HEAD
-export const createInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
-=======
 export const createInvoiceDraftRecord: RequestHandler = async (
   req,
   res,
   next,
 ) => {
->>>>>>> codex/backend-api-data
   try {
     const payload = invoicePayloadSchema.parse(req.body);
     const draft = await createInvoiceDraft(payload);
@@ -76,15 +59,11 @@ export const createInvoiceDraftRecord: RequestHandler = async (
   }
 };
 
-<<<<<<< HEAD
-export const updateInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
-=======
 export const updateInvoiceDraftRecord: RequestHandler = async (
   req,
   res,
   next,
 ) => {
->>>>>>> codex/backend-api-data
   try {
     const payload = invoicePayloadSchema.parse(req.body);
     res.json(await updateInvoiceDraft(req.params.draftId, payload));
@@ -93,15 +72,11 @@ export const updateInvoiceDraftRecord: RequestHandler = async (
   }
 };
 
-<<<<<<< HEAD
-export const listInvoiceDraftRecords: RequestHandler = async (_req, res, next) => {
-=======
 export const listInvoiceDraftRecords: RequestHandler = async (
   _req,
   res,
   next,
 ) => {
->>>>>>> codex/backend-api-data
   try {
     res.json(await listInvoiceDrafts());
   } catch (error) {
@@ -117,15 +92,11 @@ export const getInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
   }
 };
 
-<<<<<<< HEAD
-export const deleteInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
-=======
 export const deleteInvoiceDraftRecord: RequestHandler = async (
   req,
   res,
   next,
 ) => {
->>>>>>> codex/backend-api-data
   try {
     await deleteInvoiceDraft(req.params.draftId);
     res.status(204).send();
@@ -143,8 +114,6 @@ export const updateInvoiceRecord: RequestHandler = async (req, res, next) => {
   }
 };
 
-<<<<<<< HEAD
-=======
 export const listInvoiceWorkbenchRecords: RequestHandler = async (
   req,
   res,
@@ -157,7 +126,6 @@ export const listInvoiceWorkbenchRecords: RequestHandler = async (
     next(error);
   }
 };
->>>>>>> codex/backend-api-data
 export const listInvoiceRecords: RequestHandler = async (req, res, next) => {
   try {
     const query = invoiceQuerySchema.parse(req.query);
@@ -188,19 +156,11 @@ export const exportInvoiceRecords: RequestHandler = async (req, res, next) => {
     const query = invoiceQuerySchema.parse(req.query);
     const csv = await exportInvoicesCsv(query);
     res.header("Content-Type", "text/csv; charset=utf-8");
-<<<<<<< HEAD
-    res.attachment(`gst_invoices_export_${new Date().toISOString().slice(0, 10)}.csv`);
-=======
     res.attachment(
       `gst_invoices_export_${new Date().toISOString().slice(0, 10)}.csv`,
     );
->>>>>>> codex/backend-api-data
     res.send(csv);
   } catch (error) {
     next(error);
   }
-<<<<<<< HEAD
 };
-=======
-};
->>>>>>> codex/backend-api-data
