@@ -3,6 +3,7 @@ import { api } from "./api";
 import { AboutView } from "./components/AboutView";
 import { HistoryView } from "./components/HistoryView";
 import { InvoiceForm } from "./components/InvoiceForm";
+import { LoginView } from "./components/LoginView";
 import { NewInvoiceStart } from "./components/NewInvoiceStart";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar, type ViewName } from "./components/Sidebar";
@@ -10,6 +11,7 @@ import { TopBar } from "./components/TopBar";
 import { Toast } from "./components/Toast";
 import { defaultPreset } from "./constants";
 import type {
+  AuthStatus,
   Invoice,
   InvoiceDraft,
   InvoiceFormHeaderState,
@@ -35,6 +37,8 @@ export default function App() {
   const [activeView, setActiveView] = useState<ViewName>("create");
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [dbReady, setDbReady] = useState(false);
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+  const [bootstrapped, setBootstrapped] = useState(false);
   const [nextInvoiceNo, setNextInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(todayIso());
   const [toast, setToast] = useState("");
@@ -65,26 +69,74 @@ export default function App() {
     [settings.preset.invoice_prefix],
   );
 
+  const loadProtectedWorkspace = useCallback(
+    async (date = invoiceDate) => {
+      const loadedSettings = await api.getSettings();
+      setSettings(loadedSettings);
+      setDbReady(true);
+      await refreshNextNumber(date, loadedSettings.preset.invoice_prefix);
+    },
+    [invoiceDate, refreshNextNumber],
+  );
+
   useEffect(() => {
     const bootstrap = async () => {
       try {
-        const loadedSettings = await api.getSettings();
-        setSettings(loadedSettings);
-        setDbReady(true);
-        await refreshNextNumber(
-          invoiceDate,
-          loadedSettings.preset.invoice_prefix,
-        );
+        const status = await api.authStatus();
+        setAuthStatus(status);
+
+        if (status.authenticated) {
+          await loadProtectedWorkspace();
+          return;
+        }
+
+        setDbReady(false);
       } catch (error) {
         setDbReady(false);
         showToast(
           error instanceof Error ? error.message : "Could not connect to API.",
         );
+      } finally {
+        setBootstrapped(true);
       }
     };
     void bootstrap();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadProtectedWorkspace, showToast]);
+
+  const handleAuthenticated = async (status: AuthStatus) => {
+    setAuthStatus(status);
+    try {
+      await loadProtectedWorkspace();
+      showToast("Signed in securely.");
+    } catch (error) {
+      setDbReady(false);
+      showToast(
+        error instanceof Error ? error.message : "Could not load workspace.",
+      );
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // The local session is cleared even if the server already expired it.
+    }
+
+    setAuthStatus((current) =>
+      current
+        ? { ...current, authenticated: false, csrfToken: null, user: null }
+        : null,
+    );
+    setSettings(defaultSettings);
+    setDbReady(false);
+    setEditingInvoice(null);
+    setActiveDraft(null);
+    setFormHeader(null);
+    setInvoiceFormOpen(false);
+    setActiveView("create");
+    showToast("Signed out.");
+  };
 
   const handleInvoiceDateChange = useCallback(
     (date: string) => {
@@ -220,6 +272,26 @@ export default function App() {
     void refreshNextNumber(invoiceDate, nextSettings.preset.invoice_prefix);
   };
 
+  if (!bootstrapped) {
+    return (
+      <>
+        <div className="auth-shell">
+          <div className="auth-panel auth-loading">Loading secure workspace...</div>
+        </div>
+        <Toast message={toast} />
+      </>
+    );
+  }
+
+  if (authStatus?.authRequired && !authStatus.authenticated) {
+    return (
+      <>
+        <LoginView onAuthenticated={handleAuthenticated} showToast={showToast} />
+        <Toast message={toast} />
+      </>
+    );
+  }
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -237,6 +309,8 @@ export default function App() {
               ? formHeader
               : null
           }
+          authStatus={authStatus}
+          onLogout={handleLogout}
         />
         <div className="content-shell">
           {activeView === "create" &&

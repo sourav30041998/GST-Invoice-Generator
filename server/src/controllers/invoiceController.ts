@@ -16,20 +16,20 @@ import {
 } from "../services/invoiceService.js";
 import { getPreset } from "../services/settingsService.js";
 import {
+  draftIdParamSchema,
+  invoiceNumberParamSchema,
   invoicePayloadSchema,
   invoiceQuerySchema,
   invoiceWorkbenchQuerySchema,
+  nextInvoiceNumberQuerySchema,
 } from "../validation/invoiceSchemas.js";
 
 export const nextInvoiceNumber: RequestHandler = async (req, res, next) => {
   try {
     const preset = await getPreset();
-    const prefix = String(req.query.prefix || preset.invoice_prefix || "INV");
-    const invoiceDate =
-      typeof req.query.invoiceDate === "string"
-        ? req.query.invoiceDate
-        : undefined;
-    res.json({ invNo: await peekInvoiceNumber(prefix, invoiceDate) });
+    const query = nextInvoiceNumberQuerySchema.parse(req.query);
+    const prefix = query.prefix || preset.invoice_prefix || "INV";
+    res.json({ invNo: await peekInvoiceNumber(prefix, query.invoiceDate) });
   } catch (error) {
     next(error);
   }
@@ -65,8 +65,9 @@ export const updateInvoiceDraftRecord: RequestHandler = async (
   next,
 ) => {
   try {
+    const { draftId } = draftIdParamSchema.parse(req.params);
     const payload = invoicePayloadSchema.parse(req.body);
-    res.json(await updateInvoiceDraft(req.params.draftId, payload));
+    res.json(await updateInvoiceDraft(draftId, payload));
   } catch (error) {
     next(error);
   }
@@ -86,7 +87,8 @@ export const listInvoiceDraftRecords: RequestHandler = async (
 
 export const getInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
   try {
-    res.json(await getInvoiceDraft(req.params.draftId));
+    const { draftId } = draftIdParamSchema.parse(req.params);
+    res.json(await getInvoiceDraft(draftId));
   } catch (error) {
     next(error);
   }
@@ -98,7 +100,8 @@ export const deleteInvoiceDraftRecord: RequestHandler = async (
   next,
 ) => {
   try {
-    await deleteInvoiceDraft(req.params.draftId);
+    const { draftId } = draftIdParamSchema.parse(req.params);
+    await deleteInvoiceDraft(draftId);
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -107,8 +110,9 @@ export const deleteInvoiceDraftRecord: RequestHandler = async (
 
 export const updateInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
+    const { invNo } = invoiceNumberParamSchema.parse(req.params);
     const payload = invoicePayloadSchema.parse(req.body);
-    res.json(await updateInvoice(req.params.invNo, payload));
+    res.json(await updateInvoice(invNo, payload));
   } catch (error) {
     next(error);
   }
@@ -126,6 +130,7 @@ export const listInvoiceWorkbenchRecords: RequestHandler = async (
     next(error);
   }
 };
+
 export const listInvoiceRecords: RequestHandler = async (req, res, next) => {
   try {
     const query = invoiceQuerySchema.parse(req.query);
@@ -137,7 +142,8 @@ export const listInvoiceRecords: RequestHandler = async (req, res, next) => {
 
 export const getInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
-    res.json(await getInvoice(req.params.invNo));
+    const { invNo } = invoiceNumberParamSchema.parse(req.params);
+    res.json(await getInvoice(invNo));
   } catch (error) {
     next(error);
   }
@@ -145,7 +151,8 @@ export const getInvoiceRecord: RequestHandler = async (req, res, next) => {
 
 export const cancelInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
-    res.json(await cancelInvoice(req.params.invNo));
+    const { invNo } = invoiceNumberParamSchema.parse(req.params);
+    res.json(await cancelInvoice(invNo));
   } catch (error) {
     next(error);
   }

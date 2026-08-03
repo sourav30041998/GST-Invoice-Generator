@@ -10,6 +10,9 @@ type SettingsViewProps = {
   showToast: (message: string) => void;
 };
 
+const MAX_PRESET_FILE_SIZE = 100 * 1024;
+const MAX_LOGO_FILE_SIZE = 1_000_000;
+
 function readFile(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -29,7 +32,9 @@ function readImage(file: File) {
 }
 
 function downloadSamplePreset() {
-  const blob = new Blob([JSON.stringify(defaultPreset, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(defaultPreset, null, 2)], {
+    type: "application/json",
+  });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = "QuestInn-preset.json";
@@ -37,11 +42,22 @@ function downloadSamplePreset() {
   URL.revokeObjectURL(link.href);
 }
 
-export function SettingsView({ settings, onSettingsChange, onDatabaseCleared, showToast }: SettingsViewProps) {
+export function SettingsView({
+  settings,
+  onSettingsChange,
+  onDatabaseCleared,
+  showToast,
+}: SettingsViewProps) {
   const uploadPreset = async (file: File | undefined) => {
     if (!file) {
       return;
     }
+
+    if (file.size > MAX_PRESET_FILE_SIZE) {
+      showToast("Preset file is too large.");
+      return;
+    }
+
     try {
       const json = JSON.parse(await readFile(file));
       const { preset } = await api.updatePreset(json);
@@ -56,6 +72,12 @@ export function SettingsView({ settings, onSettingsChange, onDatabaseCleared, sh
     if (!file) {
       return;
     }
+
+    if (file.size > MAX_LOGO_FILE_SIZE) {
+      showToast("Logo must be 1 MB or smaller.");
+      return;
+    }
+
     try {
       const dataUrl = await readImage(file);
       const { logoDataUrl } = await api.updateLogo(dataUrl);
@@ -108,7 +130,11 @@ export function SettingsView({ settings, onSettingsChange, onDatabaseCleared, sh
             <UploadCloud size={28} />
             <span>Upload preset JSON</span>
             <small>Business details, GSTIN, bank, invoice prefix</small>
-            <input type="file" accept=".json,application/json" onChange={(event) => void uploadPreset(event.target.files?.[0])} />
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={(event) => void uploadPreset(event.target.files?.[0])}
+            />
           </label>
           <div className="preset-preview">
             <div className="success-line">Preset loaded</div>
@@ -129,11 +155,19 @@ export function SettingsView({ settings, onSettingsChange, onDatabaseCleared, sh
           <span>Logo</span>
         </div>
         <div className="logo-row">
-          <img className="logo-preview" src={settings.logoDataUrl || defaultLogoUrl} alt={`${settings.preset.business_name} logo`} />
+          <img
+            className="logo-preview"
+            src={settings.logoDataUrl || defaultLogoUrl}
+            alt={`${settings.preset.business_name} logo`}
+          />
           <label className="btn btn-outline file-button">
             <ImagePlus size={16} />
             Upload Logo
-            <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={(event) => void uploadLogo(event.target.files?.[0])} />
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              onChange={(event) => void uploadLogo(event.target.files?.[0])}
+            />
           </label>
           <button className="btn btn-outline danger-text" type="button" onClick={clearLogo}>
             <Trash2 size={16} />

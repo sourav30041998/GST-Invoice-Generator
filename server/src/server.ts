@@ -9,7 +9,8 @@ async function bootstrap() {
   });
 }
 
-bootstrap().catch((error) => {
-  console.error("Failed to start API", error);
+bootstrap().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : "Unknown startup error";
+  console.error(`Failed to start API: ${message}`);
   process.exit(1);
 });
