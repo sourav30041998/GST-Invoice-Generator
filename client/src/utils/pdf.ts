@@ -1,31 +1,11 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { defaultLogoUrl } from "../constants";
 import type { Invoice } from "../types";
 import { formatCurrency, numWords } from "./calculations";
 import { formatDate } from "./dates";
 
-export async function urlToDataUrl(url: string) {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
 export async function resolveLogoDataUrl(uploadedLogo: string | null) {
-  if (uploadedLogo) {
-    return uploadedLogo;
-  }
-
-  try {
-    return await urlToDataUrl(defaultLogoUrl);
-  } catch {
-    return null;
-  }
+  return uploadedLogo || null;
 }
 
 const imageFormat = (dataUrl: string) => {

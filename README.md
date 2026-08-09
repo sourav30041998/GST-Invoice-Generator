@@ -45,7 +45,7 @@ The production server serves the built React app and API from one origin. This k
 
 In Render, create a Node **Web Service** from the `main` branch with these values:
 
-- Build command: `npm ci && npm run build && npm run db:create-indexes`
+- Build command: `npm ci --include=dev && npm run build && npm run db:create-indexes`
 - Start command: `npm start`
 - Health check path: `/api/health`
 - Instance type: `Free`

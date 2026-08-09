@@ -1,6 +1,6 @@
 import { Download, ImagePlus, Trash2, UploadCloud } from "lucide-react";
 import { api } from "../api";
-import { defaultLogoUrl, defaultPreset } from "../constants";
+import { defaultPreset } from "../constants";
 import type { Settings } from "../types";
 
 type SettingsViewProps = {
@@ -37,7 +37,7 @@ function downloadSamplePreset() {
   });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "QuestInn-preset.json";
+  link.download = "sample-stay-hotel-preset.json";
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -155,11 +155,20 @@ export function SettingsView({
           <span>Logo</span>
         </div>
         <div className="logo-row">
-          <img
-            className="logo-preview"
-            src={settings.logoDataUrl || defaultLogoUrl}
-            alt={`${settings.preset.business_name} logo`}
-          />
+          {settings.logoDataUrl ? (
+            <img
+              className="logo-preview"
+              src={settings.logoDataUrl}
+              alt={`${settings.preset.business_name} logo`}
+            />
+          ) : (
+            <div
+              className="logo-preview logo-placeholder"
+              aria-label="No business logo uploaded"
+            >
+              SSH
+            </div>
+          )}
           <label className="btn btn-outline file-button">
             <ImagePlus size={16} />
             Upload Logo

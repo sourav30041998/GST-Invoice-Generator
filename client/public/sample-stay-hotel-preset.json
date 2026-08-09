@@ -1,0 +1,18 @@
+{
+  "business_name": "Sample Stay Hotel",
+  "tagline": "Demo Property, Kolkata",
+  "gstin": "22AAAAA0000A1Z5",
+  "address_line1": "123 Example Road",
+  "address_line2": "Kolkata, West Bengal 700001",
+  "phone": "+91 90000 00000",
+  "fax": "",
+  "upi": "samplestay@upi",
+  "website": "www.samplestay.test",
+  "email": "billing@samplestay.test",
+  "bank_acc_name": "Sample Stay Hotel",
+  "invoice_prefix": "TST",
+  "bank_name": "Example Bank, Kolkata Branch",
+  "bank_account": "123456789012",
+  "bank_ifsc": "TEST0001234",
+  "terms": "This is a sample preset for testing. Replace these details with your business information before issuing an invoice."
+}

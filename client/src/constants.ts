@@ -1,23 +1,23 @@
 import type { LineItemInput, Preset } from "./types";
 
 export const defaultPreset: Preset = {
-  business_name: "Quest Inn",
-  tagline: "Beach Resort, Mandarmani",
-  gstin: "19ANFPD5904J1ZZ",
-  address_line1: "Mandarmani Marine Drive Road, Dadanpatra",
-  address_line2: "Mandarmani, West Bengal 721455",
-  phone: "+91 6296663434",
+  business_name: "Sample Stay Hotel",
+  tagline: "Demo Property, Kolkata",
+  gstin: "22AAAAA0000A1Z5",
+  address_line1: "123 Example Road",
+  address_line2: "Kolkata, West Bengal 700001",
+  phone: "+91 90000 00000",
   fax: "",
-  upi: "QUESTINNBEACHRESORT@icici",
-  website: "www.questinn.in",
-  email: "questinnbeachresort@gmail.com",
-  bank_acc_name: "Quest Inn Beach Resort",
-  invoice_prefix: "QBM",
-  bank_name: "ICICI Bank, PRINCE ANWAR SHAH ROAD BRANCH",
-  bank_account: "054005002409",
-  bank_ifsc: "ICIC0000540",
+  upi: "samplestay@upi",
+  website: "www.samplestay.test",
+  email: "billing@samplestay.test",
+  bank_acc_name: "Sample Stay Hotel",
+  invoice_prefix: "TST",
+  bank_name: "Example Bank, Kolkata Branch",
+  bank_account: "123456789012",
+  bank_ifsc: "TEST0001234",
   terms:
-    "Thank you for choosing Quest Inn group of hotels. We hope you enjoyed your stay! For any inquiries please contact our front desk."
+    "This is a sample preset for testing. Replace these details with your business information before issuing an invoice."
 };
 
 export const taxPresets = [
@@ -99,5 +99,3 @@ export const emptyLineItem = (presetKey = "Rooms <= Rs.7500/day", date = ""): Li
     taxInclusive: false
   };
 };
-
-export const defaultLogoUrl = "/logo_questinn.png";

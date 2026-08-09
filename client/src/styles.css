@@ -1404,6 +1404,16 @@ select {
     padding: 5px;
   }
 
+  .logo-placeholder {
+    display: grid;
+    place-items: center;
+    background: var(--surface-2);
+    color: var(--accent-2);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
   .danger-zone {
     display: flex;
     align-items: center;
