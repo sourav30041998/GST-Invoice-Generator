@@ -38,6 +38,14 @@ function compareText(left: string, right: string) {
   return crypto.timingSafeEqual(leftHash, rightHash);
 }
 
+function safeDecodeCookiePart(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return "";
+  }
+}
+
 function parseCookies(req: Request) {
   const header = req.headers.cookie || "";
   return Object.fromEntries(
@@ -51,8 +59,8 @@ function parseCookies(req: Request) {
           return [part, ""];
         }
         return [
-          decodeURIComponent(part.slice(0, index)),
-          decodeURIComponent(part.slice(index + 1)),
+          safeDecodeCookiePart(part.slice(0, index)),
+          safeDecodeCookiePart(part.slice(index + 1)),
         ];
       }),
   );
