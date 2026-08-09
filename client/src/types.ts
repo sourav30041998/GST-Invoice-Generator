@@ -21,6 +21,13 @@ export type Settings = {
   preset: Preset;
   logoDataUrl: string | null;
 };
+export type AuthStatus = {
+  authRequired: boolean;
+  authenticated: boolean;
+  user: string | null;
+  csrfToken: string | null;
+  sessionExpiresAt: string | null;
+};
 
 export type InvoiceWorkflowStatus =
   "draft" | "checkedIn" | "checkedOut" | "cancelled";

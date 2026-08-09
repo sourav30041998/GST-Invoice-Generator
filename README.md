@@ -35,6 +35,10 @@ Backend runs on `http://localhost:5050`.
 - Production fixes should use `hotfix/<short-fix-name>`.
 - Work is reviewed through pull requests before merging into `main`.
 
+## Production Security
+
+Before deployment, review [SECURITY.md](./SECURITY.md) and set the required production environment variables for authentication, secure cookies, CORS, MongoDB Atlas, and database-reset controls.
+
 ## GST Rate Notes
 
 The default hotel accommodation presets follow the official GST position identified during the migration: hotel accommodation up to Rs. 7,500 per unit per day is 12%, and above Rs. 7,500 is 18%. Restaurant and non-specified outdoor catering defaults are 5%. Confirm rates with a tax professional before production use.

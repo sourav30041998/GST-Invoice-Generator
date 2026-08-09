@@ -87,8 +87,12 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
     }
   };
 
-  const exportCsv = () => {
-    window.location.href = api.exportCsvUrl(filters);
+  const exportCsv = async () => {
+    try {
+      await api.downloadCsv(filters);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "CSV export failed.");
+    }
   };
 
   return (
@@ -155,7 +159,7 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
           <span>GST invoices</span>
           <strong>{summary.gstCount}</strong>
         </div>
-        <button className="btn btn-outline" type="button" onClick={exportCsv}>
+        <button className="btn btn-outline" type="button" onClick={() => void exportCsv()}>
           <FileSpreadsheet size={16} />
           Export CSV
         </button>

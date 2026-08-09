@@ -103,10 +103,17 @@ function cleanPayload(
   return {
     ...form,
     workflowStatus,
-    lineItems: lineItems.map(({ id: _id, ...line }) => ({
-      ...line,
+    lineItems: lineItems.map((line) => ({
+      presetKey: line.presetKey,
+      description: line.description,
+      hsn: line.hsn,
+      date: line.date,
       units: Number(line.units) || 0,
       rate: Number(line.rate) || 0,
+      cgstRate: Number(line.cgstRate) || 0,
+      sgstRate: Number(line.sgstRate) || 0,
+      igstRate: Number(line.igstRate) || 0,
+      taxInclusive: Boolean(line.taxInclusive),
     })),
     adjustments: adjustments
       .filter(

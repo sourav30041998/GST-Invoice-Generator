@@ -1,4 +1,6 @@
 import type { RequestHandler } from "express";
+import { env } from "../config/env.js";
+import { ApiError } from "../middleware/errorHandler.js";
 import { clearDatabase } from "../services/invoiceService.js";
 import { getSettings, removeLogo, saveLogo, savePreset } from "../services/settingsService.js";
 import { logoSchema, presetSchema } from "../validation/invoiceSchemas.js";
@@ -41,6 +43,10 @@ export const deleteLogo: RequestHandler = async (_req, res, next) => {
 
 export const clearAllData: RequestHandler = async (_req, res, next) => {
   try {
+    if (!env.ALLOW_DATABASE_RESET) {
+      throw new ApiError(403, "Database reset is disabled in this environment");
+    }
+
     await clearDatabase();
     res.status(204).send();
   } catch (error) {

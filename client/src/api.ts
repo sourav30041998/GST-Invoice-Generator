@@ -1,4 +1,5 @@
 import type {
+  AuthStatus,
   Invoice,
   InvoiceDraft,
   InvoiceDraftListItem,
@@ -17,13 +18,30 @@ const API_BASE =
     ? configuredApiUrl
     : "/api";
 
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+let csrfToken: string | null = null;
+
+function setCsrfToken(token: string | null | undefined) {
+  csrfToken = token || null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method || "GET").toUpperCase();
+  const headers = new Headers(init?.headers);
+
+  if (!headers.has("Content-Type") && init?.body) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (csrfToken && UNSAFE_METHODS.has(method)) {
+    headers.set("X-CSRF-Token", csrfToken);
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
     ...init,
+    method,
+    credentials: "include",
+    headers,
   });
 
   if (!response.ok) {
@@ -51,6 +69,23 @@ function queryString(filters: Record<string, string | undefined>) {
 }
 
 export const api = {
+  async authStatus() {
+    const status = await request<AuthStatus>("/auth/me");
+    setCsrfToken(status.csrfToken);
+    return status;
+  },
+  async login(username: string, password: string) {
+    const status = await request<AuthStatus>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+    setCsrfToken(status.csrfToken);
+    return status;
+  },
+  async logout() {
+    await request<void>("/auth/logout", { method: "POST" });
+    setCsrfToken(null);
+  },
   getSettings: () => request<Settings>("/settings"),
   updatePreset: (preset: Preset) =>
     request<{ preset: Preset }>("/settings/preset", {
@@ -113,5 +148,25 @@ export const api = {
     }),
   exportCsvUrl: (filters: InvoiceFilters) =>
     `${API_BASE}/invoices/export.csv${queryString(filters)}`,
+  async downloadCsv(filters: InvoiceFilters) {
+    const response = await fetch(this.exportCsvUrl(filters), {
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        message?: string;
+      } | null;
+      throw new Error(body?.message || `Request failed with ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `gst_invoices_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
   listIndianStates: () => request<string[]>("/reference-data/indian-states"),
 };
