@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import compression from "compression";
 import cors from "cors";
 import express from "express";
@@ -18,6 +21,10 @@ import referenceDataRoutes from "./routes/referenceDataRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 
 export const app = express();
+
+const serverDirectory = dirname(fileURLToPath(import.meta.url));
+const frontendDistDirectory = resolve(serverDirectory, "../../client/dist");
+const frontendIndexFile = resolve(frontendDistDirectory, "index.html");
 
 function isTrustedOrigin(origin?: string) {
   if (!origin) {
@@ -89,6 +96,41 @@ app.use("/api/auth", authRoutes);
 app.use("/api/reference-data", requireAuth, referenceDataRoutes);
 app.use("/api/settings", requireAuth, requireCsrf, settingsRoutes);
 app.use("/api/invoices", requireAuth, requireCsrf, invoiceRoutes);
+
+if (env.NODE_ENV === "production") {
+  if (!existsSync(frontendIndexFile)) {
+    throw new Error(
+      "Frontend build is missing. Run the root build command before starting production.",
+    );
+  }
+
+  app.use(
+    express.static(frontendDistDirectory, {
+      index: false,
+      maxAge: 1000 * 60 * 60 * 24 * 365,
+      immutable: true,
+      setHeaders(res, filePath) {
+        if (basename(filePath) === "index.html") {
+          res.setHeader("Cache-Control", "no-cache");
+        }
+      },
+    }),
+  );
+  app.get("*", (req, res, next) => {
+    const isApiRequest = req.path === "/api" || req.path.startsWith("/api/");
+    if (isApiRequest || !req.accepts("html")) {
+      next();
+      return;
+    }
+
+    res.setHeader("Cache-Control", "no-cache");
+    res.sendFile(frontendIndexFile, (error) => {
+      if (error) {
+        next(error);
+      }
+    });
+  });
+}
 
 app.use(notFound);
 app.use(errorHandler);

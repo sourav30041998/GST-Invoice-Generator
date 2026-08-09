@@ -13,6 +13,7 @@
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace client",
     "lint": "npm run lint --workspace client",
     "start": "npm run start --workspace server",
+    "db:create-indexes": "npm run db:create-indexes --workspace server",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\""
   },
   "devDependencies": {
