@@ -1,13 +1,20 @@
 import type { RequestHandler } from "express";
 import { env } from "../config/env.js";
+import { getAuthContext } from "../middleware/auth.js";
 import { ApiError } from "../middleware/errorHandler.js";
-import { clearDatabase } from "../services/invoiceService.js";
-import { getSettings, removeLogo, saveLogo, savePreset } from "../services/settingsService.js";
+import { clearCompanyData } from "../services/invoiceService.js";
+import {
+  getSettings,
+  removeLogo,
+  saveLogo,
+  savePreset,
+} from "../services/settingsService.js";
 import { logoSchema, presetSchema } from "../validation/invoiceSchemas.js";
 
 export const readSettings: RequestHandler = async (_req, res, next) => {
   try {
-    res.json(await getSettings());
+    const tenant = getAuthContext(res);
+    res.json(await getSettings(tenant.organizationId));
   } catch (error) {
     next(error);
   }
@@ -16,7 +23,8 @@ export const readSettings: RequestHandler = async (_req, res, next) => {
 export const updatePreset: RequestHandler = async (req, res, next) => {
   try {
     const preset = presetSchema.parse(req.body);
-    res.json({ preset: await savePreset(preset) });
+    const tenant = getAuthContext(res);
+    res.json({ preset: await savePreset(tenant.organizationId, preset) });
   } catch (error) {
     next(error);
   }
@@ -25,7 +33,8 @@ export const updatePreset: RequestHandler = async (req, res, next) => {
 export const updateLogo: RequestHandler = async (req, res, next) => {
   try {
     const { dataUrl } = logoSchema.parse(req.body);
-    await saveLogo(dataUrl);
+    const tenant = getAuthContext(res);
+    await saveLogo(tenant.organizationId, dataUrl);
     res.json({ logoDataUrl: dataUrl });
   } catch (error) {
     next(error);
@@ -34,7 +43,8 @@ export const updateLogo: RequestHandler = async (req, res, next) => {
 
 export const deleteLogo: RequestHandler = async (_req, res, next) => {
   try {
-    await removeLogo();
+    const tenant = getAuthContext(res);
+    await removeLogo(tenant.organizationId);
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -47,7 +57,12 @@ export const clearAllData: RequestHandler = async (_req, res, next) => {
       throw new ApiError(403, "Database reset is disabled in this environment");
     }
 
-    await clearDatabase();
+    const context = getAuthContext(res);
+    await clearCompanyData({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      userEmail: context.email,
+    });
     res.status(204).send();
   } catch (error) {
     next(error);

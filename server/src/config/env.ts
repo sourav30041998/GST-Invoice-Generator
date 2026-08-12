@@ -23,10 +23,15 @@ const envSchema = z.object({
     .refine((value) => value === 4 || value === 6)
     .optional(),
   CLIENT_ORIGIN: z.string().trim().min(1).default("http://localhost:5173"),
-  ADMIN_USERNAME: z.string().trim().min(1).max(80).default("admin"),
-  ADMIN_PASSWORD: z.string().optional(),
   SESSION_SECRET: z.string().optional(),
-  SESSION_TTL_MINUTES: z.coerce.number().int().positive().max(1440).default(480),
+  INVITATION_TOKEN_SECRET: z.string().min(32),
+  ADMIN_INTERNAL_SHARED_SECRET: z.string().min(32),
+  SESSION_TTL_MINUTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(1440)
+    .default(480),
   AUTH_REQUIRED: booleanStringSchema,
   TRUST_PROXY: booleanStringSchema,
   COOKIE_SECURE: booleanStringSchema,
@@ -56,11 +61,10 @@ const clientOrigins = parsedEnv.CLIENT_ORIGIN.split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const authRequired = toBoolean(parsedEnv.AUTH_REQUIRED, isProduction);
+const authRequired = toBoolean(parsedEnv.AUTH_REQUIRED, true);
 const cookieSecure = toBoolean(parsedEnv.COOKIE_SECURE, isProduction);
 const sessionCookieSameSite =
-  parsedEnv.SESSION_COOKIE_SAMESITE || (isProduction ? "none" : "lax");
-
+  parsedEnv.SESSION_COOKIE_SAMESITE || "lax";
 if (!clientOrigins.length) {
   throw new Error("CLIENT_ORIGIN must include at least one trusted origin");
 }
@@ -84,16 +88,15 @@ if (isProduction) {
   if (!cookieSecure) {
     throw new Error("Production requires COOKIE_SECURE=true");
   }
+
 }
 
-if (authRequired) {
-  if (!parsedEnv.ADMIN_PASSWORD || parsedEnv.ADMIN_PASSWORD.length < 12) {
-    throw new Error("ADMIN_PASSWORD must be at least 12 characters");
-  }
+if (!authRequired) {
+  throw new Error("AUTH_REQUIRED must be true for organization isolation");
+}
 
-  if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET.length < 32) {
-    throw new Error("SESSION_SECRET must be at least 32 characters");
-  }
+if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET.length < 32) {
+  throw new Error("SESSION_SECRET must be at least 32 characters");
 }
 
 if (sessionCookieSameSite === "none" && !cookieSecure) {
@@ -107,6 +110,9 @@ export const env = {
   TRUST_PROXY: toBoolean(parsedEnv.TRUST_PROXY, isProduction),
   COOKIE_SECURE: cookieSecure,
   SESSION_COOKIE_SAMESITE: sessionCookieSameSite,
+  COMPANY_SESSION_COOKIE: isProduction
+    ? "__Host-company_session"
+    : "qi_company_session",
   ALLOW_DATABASE_RESET: toBoolean(
     parsedEnv.ALLOW_DATABASE_RESET,
     !isProduction,

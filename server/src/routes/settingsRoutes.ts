@@ -1,5 +1,11 @@
 import { Router } from "express";
-import { clearAllData, deleteLogo, readSettings, updateLogo, updatePreset } from "../controllers/settingsController.js";
+import {
+  clearAllData,
+  deleteLogo,
+  readSettings,
+  updateLogo,
+  updatePreset,
+} from "../controllers/settingsController.js";
 
 const router = Router();
 

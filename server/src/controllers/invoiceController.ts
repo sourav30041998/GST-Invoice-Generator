@@ -1,4 +1,5 @@
-import type { RequestHandler } from "express";
+import type { RequestHandler, Response } from "express";
+import { getAuthContext } from "../middleware/auth.js";
 import {
   cancelInvoice,
   createInvoice,
@@ -11,6 +12,7 @@ import {
   listInvoices,
   listInvoiceWorkbench,
   peekInvoiceNumber,
+  type TenantContext,
   updateInvoice,
   updateInvoiceDraft,
 } from "../services/invoiceService.js";
@@ -24,12 +26,24 @@ import {
   nextInvoiceNumberQuerySchema,
 } from "../validation/invoiceSchemas.js";
 
+function tenantContext(res: Response): TenantContext {
+  const context = getAuthContext(res);
+  return {
+    organizationId: context.organizationId,
+    userId: context.userId,
+    userEmail: context.email,
+  };
+}
+
 export const nextInvoiceNumber: RequestHandler = async (req, res, next) => {
   try {
-    const preset = await getPreset();
+    const tenant = tenantContext(res);
+    const preset = await getPreset(tenant.organizationId);
     const query = nextInvoiceNumberQuerySchema.parse(req.query);
     const prefix = query.prefix || preset.invoice_prefix || "INV";
-    res.json({ invNo: await peekInvoiceNumber(prefix, query.invoiceDate) });
+    res.json({
+      invNo: await peekInvoiceNumber(tenant, prefix, query.invoiceDate),
+    });
   } catch (error) {
     next(error);
   }
@@ -38,8 +52,7 @@ export const nextInvoiceNumber: RequestHandler = async (req, res, next) => {
 export const createInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
     const payload = invoicePayloadSchema.parse(req.body);
-    const invoice = await createInvoice(payload);
-    res.status(201).json(invoice);
+    res.status(201).json(await createInvoice(tenantContext(res), payload));
   } catch (error) {
     next(error);
   }
@@ -52,8 +65,7 @@ export const createInvoiceDraftRecord: RequestHandler = async (
 ) => {
   try {
     const payload = invoicePayloadSchema.parse(req.body);
-    const draft = await createInvoiceDraft(payload);
-    res.status(201).json(draft);
+    res.status(201).json(await createInvoiceDraft(tenantContext(res), payload));
   } catch (error) {
     next(error);
   }
@@ -67,7 +79,7 @@ export const updateInvoiceDraftRecord: RequestHandler = async (
   try {
     const { draftId } = draftIdParamSchema.parse(req.params);
     const payload = invoicePayloadSchema.parse(req.body);
-    res.json(await updateInvoiceDraft(draftId, payload));
+    res.json(await updateInvoiceDraft(tenantContext(res), draftId, payload));
   } catch (error) {
     next(error);
   }
@@ -79,7 +91,7 @@ export const listInvoiceDraftRecords: RequestHandler = async (
   next,
 ) => {
   try {
-    res.json(await listInvoiceDrafts());
+    res.json(await listInvoiceDrafts(tenantContext(res)));
   } catch (error) {
     next(error);
   }
@@ -88,7 +100,7 @@ export const listInvoiceDraftRecords: RequestHandler = async (
 export const getInvoiceDraftRecord: RequestHandler = async (req, res, next) => {
   try {
     const { draftId } = draftIdParamSchema.parse(req.params);
-    res.json(await getInvoiceDraft(draftId));
+    res.json(await getInvoiceDraft(tenantContext(res), draftId));
   } catch (error) {
     next(error);
   }
@@ -101,7 +113,7 @@ export const deleteInvoiceDraftRecord: RequestHandler = async (
 ) => {
   try {
     const { draftId } = draftIdParamSchema.parse(req.params);
-    await deleteInvoiceDraft(draftId);
+    await deleteInvoiceDraft(tenantContext(res), draftId);
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -112,7 +124,7 @@ export const updateInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
     const { invNo } = invoiceNumberParamSchema.parse(req.params);
     const payload = invoicePayloadSchema.parse(req.body);
-    res.json(await updateInvoice(invNo, payload));
+    res.json(await updateInvoice(tenantContext(res), invNo, payload));
   } catch (error) {
     next(error);
   }
@@ -125,7 +137,7 @@ export const listInvoiceWorkbenchRecords: RequestHandler = async (
 ) => {
   try {
     const query = invoiceWorkbenchQuerySchema.parse(req.query);
-    res.json(await listInvoiceWorkbench(query));
+    res.json(await listInvoiceWorkbench(tenantContext(res), query));
   } catch (error) {
     next(error);
   }
@@ -134,7 +146,7 @@ export const listInvoiceWorkbenchRecords: RequestHandler = async (
 export const listInvoiceRecords: RequestHandler = async (req, res, next) => {
   try {
     const query = invoiceQuerySchema.parse(req.query);
-    res.json(await listInvoices(query));
+    res.json(await listInvoices(tenantContext(res), query));
   } catch (error) {
     next(error);
   }
@@ -143,7 +155,7 @@ export const listInvoiceRecords: RequestHandler = async (req, res, next) => {
 export const getInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
     const { invNo } = invoiceNumberParamSchema.parse(req.params);
-    res.json(await getInvoice(invNo));
+    res.json(await getInvoice(tenantContext(res), invNo));
   } catch (error) {
     next(error);
   }
@@ -152,7 +164,7 @@ export const getInvoiceRecord: RequestHandler = async (req, res, next) => {
 export const cancelInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
     const { invNo } = invoiceNumberParamSchema.parse(req.params);
-    res.json(await cancelInvoice(invNo));
+    res.json(await cancelInvoice(tenantContext(res), invNo));
   } catch (error) {
     next(error);
   }
@@ -161,7 +173,7 @@ export const cancelInvoiceRecord: RequestHandler = async (req, res, next) => {
 export const exportInvoiceRecords: RequestHandler = async (req, res, next) => {
   try {
     const query = invoiceQuerySchema.parse(req.query);
-    const csv = await exportInvoicesCsv(query);
+    const csv = await exportInvoicesCsv(tenantContext(res), query);
     res.header("Content-Type", "text/csv; charset=utf-8");
     res.attachment(
       `gst_invoices_export_${new Date().toISOString().slice(0, 10)}.csv`,

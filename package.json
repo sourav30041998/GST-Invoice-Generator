@@ -14,6 +14,7 @@
     "lint": "npm run lint --workspace client",
     "start": "npm run start --workspace server",
     "db:create-indexes": "npm run db:create-indexes --workspace server",
+    "db:migrate-single-company-tenancy": "npm run db:migrate-single-company-tenancy --workspace server",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\""
   },
   "devDependencies": {

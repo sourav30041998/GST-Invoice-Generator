@@ -33,6 +33,13 @@ const adjustmentSchema = new Schema(
 
 const invoiceDraftSchema = new Schema(
   {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      immutable: true,
+      index: true,
+    },
     businessProfileId: { type: Schema.Types.ObjectId, ref: "BusinessProfile" },
     invDate: { type: String, required: true },
     checkinDate: { type: String, default: "" },
@@ -63,13 +70,19 @@ const invoiceDraftSchema = new Schema(
     presetSnapshot: { type: Schema.Types.Mixed, required: true },
     businessSnapshot: { type: Schema.Types.Mixed, required: true },
     createdBy: { type: String, default: "system", trim: true },
+    createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true, minimize: false },
 );
 
-invoiceDraftSchema.index({ createdAt: -1 });
-invoiceDraftSchema.index({ workflowStatus: 1, createdAt: -1 });
+invoiceDraftSchema.index({ organizationId: 1, createdAt: -1 });
 invoiceDraftSchema.index({
+  organizationId: 1,
+  workflowStatus: 1,
+  createdAt: -1,
+});
+invoiceDraftSchema.index({
+  organizationId: 1,
   partyName: "text",
   roomNo: "text",
   confirmNo: "text",

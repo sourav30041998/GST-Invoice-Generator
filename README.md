@@ -1,6 +1,10 @@
 # GST Invoice Generator
 
-A full-stack GST invoicing application for hospitality billing. The UI preserves the original single-page invoice generator experience while moving invoices, settings, counters, and logo metadata into MongoDB through a Node.js and Express API.
+Platform administration is maintained and deployed from a separate
+`gst-invoice-platform-admin` repository. The company API no longer serves
+platform-admin routes.
+
+A full-stack GST invoicing application for hospitality billing. Each account belongs to exactly one private company workspace; invoice, customer, business profile, counter, draft, and audit data is isolated by organization.
 
 ## Stack
 
@@ -15,7 +19,8 @@ A full-stack GST invoicing application for hospitality billing. The UI preserves
 1. Copy `.env.example` to `.env` and adjust values if needed.
 2. Start MongoDB locally, or run `docker compose up -d mongo`.
 3. Install dependencies with `npm install`.
-4. Start both apps with `npm run dev`.
+4. For a brand-new database, run `npm run db:create-indexes`.
+5. Start both apps with `npm run dev`.
 
 Frontend runs on `http://localhost:5173`.
 Backend runs on `http://localhost:5050`.
@@ -23,10 +28,24 @@ Backend runs on `http://localhost:5050`.
 ## Core Workflows
 
 - Create GST invoices with line-item tax presets, adjustments, amount-in-words, and PDF download.
-- Store invoices, preset settings, logo data, counters, and cancellation state in MongoDB.
+- Create a company owner account, then maintain that company's business profile and invoices.
+- Store invoices, preset settings, logo data, counters, drafts, sessions, and cancellation state in MongoDB.
 - Browse invoice history, filter by date, GST status, status, or search term.
 - Re-download, edit, cancel, and export invoice records.
-- Upload business preset JSON and logo from the settings view.
+- Upload business preset JSON and logo from the company profile view.
+
+## Company Isolation
+
+- One owner account belongs to one organization. Company switching and cross-company memberships are intentionally not available.
+- Every protected request reads the organization ID from the server-side session, never from the browser request body or URL.
+- Invoice numbers are unique per organization, so two companies can both use `INV-202608-0001` without seeing one another's records.
+- The company profile and clear-data action affect only the signed-in organization.
+
+See [MULTI_TENANCY.md](./MULTI_TENANCY.md) for the data model, API list, migration procedure, and rollout checklist.
+
+## Closed Access
+
+Company registration is closed. A separate MFA-protected platform administrator creates one-time invitations for approved company owners; only accepting an unexpired invitation activates a company. See [ACCESS_CONTROL.md](./ACCESS_CONTROL.md) and [SERVICE_SEPARATION.md](./SERVICE_SEPARATION.md) for the cross-service contract and operational rules.
 
 ## Branching Strategy
 
@@ -39,11 +58,13 @@ Backend runs on `http://localhost:5050`.
 
 Before deployment, review [SECURITY.md](./SECURITY.md) and set the required production environment variables for authentication, secure cookies, CORS, MongoDB Atlas, and database-reset controls.
 
+The next planned hardening stages, including Atlas least-privilege roles, Admin access gating, Redis rate limits, mTLS, passkeys, encryption, monitoring, and incident response, are tracked in [FUTURE_SECURITY_ROADMAP.md](./FUTURE_SECURITY_ROADMAP.md).
+
 ## Free Deployment (Render + MongoDB Atlas)
 
 The production server serves the built React app and API from one origin. This keeps the secure session cookie first-party, so leave `VITE_API_URL` unset for this deployment.
 
-In Render, create a Node **Web Service** from the `main` branch with these values:
+In Render, create a Node **Web Service** from the reviewed release branch with these values:
 
 - Build command: `npm ci --include=dev && npm run build && npm run db:create-indexes`
 - Start command: `npm start`
@@ -59,16 +80,18 @@ MONGODB_DB_NAME=gst_invoice_generator
 MONGODB_IP_FAMILY=4
 CLIENT_ORIGIN=https://<your-render-service>.onrender.com
 AUTH_REQUIRED=true
-ADMIN_USERNAME=<admin username>
-ADMIN_PASSWORD=<strong unique password>
 SESSION_SECRET=<random secret with 32 or more characters>
 SESSION_TTL_MINUTES=480
+INVITATION_TOKEN_SECRET=<shared 32+ character invitation-token secret>
+ADMIN_INTERNAL_SHARED_SECRET=<shared 32+ character internal-service secret>
 TRUST_PROXY=true
 COOKIE_SECURE=true
 SESSION_COOKIE_SAMESITE=lax
 ALLOW_DATABASE_RESET=false
 REQUEST_BODY_LIMIT=2mb
 ```
+
+Before the first deployment of the multi-company branch, follow the one-time migration procedure in [MULTI_TENANCY.md](./MULTI_TENANCY.md). Deploy the separate Platform Admin service only after the Company service is healthy; its own repository documents administrator bootstrap and MFA enrollment.
 
 Render Free services can sleep after inactivity, so users may need to wait for the first request. MongoDB Atlas Free clusters do not include managed backups; export encrypted backups with `mongodump` on a regular schedule.
 

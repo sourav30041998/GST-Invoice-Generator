@@ -17,7 +17,7 @@ export function formatDate(value?: string) {
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
-    year: "numeric"
+    year: "numeric",
   });
 }
 export function formatDateTime(value?: string) {
@@ -25,7 +25,9 @@ export function formatDateTime(value?: string) {
     return "";
   }
 
-  const source = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  const source = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? `${value}T00:00:00`
+    : value;
   const date = new Date(source);
   if (Number.isNaN(date.getTime())) {
     return value;
@@ -36,6 +38,6 @@ export function formatDateTime(value?: string) {
     month: "short",
     year: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }

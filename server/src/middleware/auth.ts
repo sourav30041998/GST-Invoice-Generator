@@ -2,40 +2,65 @@ import crypto from "node:crypto";
 import type { Request, RequestHandler, Response } from "express";
 import { z } from "zod";
 import { env } from "../config/env.js";
+import { OrganizationModel } from "../models/Organization.js";
+import { SessionModel } from "../models/Session.js";
+import { UserModel } from "../models/User.js";
+import { hashPassword, verifyPassword } from "../services/passwordService.js";
 import { ApiError } from "./errorHandler.js";
 
-const SESSION_COOKIE = "qi_session";
+const SESSION_COOKIE = env.COMPANY_SESSION_COOKIE;
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-type Session = {
-  csrfToken: string;
-  expiresAt: number;
-  user: string;
+export type UserSessionContext = {
+  userId: string;
+  organizationId: string;
+  organizationName: string;
+  email: string;
+  displayName: string;
+  role: "owner";
 };
 
-const sessions = new Map<string, Session>();
+type AuthContext = UserSessionContext & {
+  csrfToken: string;
+  expiresAt: Date;
+};
 
-const loginSchema = z.object({
-  username: z.string().trim().min(1).max(80),
-  password: z.string().min(1).max(256),
-});
+type SessionRecord = {
+  _id: unknown;
+  userId: unknown;
+  organizationId: unknown;
+  csrfToken: string;
+  expiresAt: Date;
+};
 
-function secret() {
-  return env.SESSION_SECRET || "development-session-secret";
+const loginSchema = z
+  .object({
+    email: z
+      .string()
+      .trim()
+      .email()
+      .max(254)
+      .transform((value) => value.toLowerCase()),
+    password: z.string().min(1).max(128),
+  })
+  .strict();
+
+function sessionSecret() {
+  if (!env.SESSION_SECRET) {
+    throw new Error("SESSION_SECRET is required");
+  }
+  return env.SESSION_SECRET;
 }
 
-function hmac(value: string) {
-  return crypto.createHmac("sha256", secret()).update(value).digest("hex");
+function hashToken(value: string) {
+  return crypto
+    .createHmac("sha256", sessionSecret())
+    .update(value)
+    .digest("hex");
 }
 
 function randomToken(bytes = 32) {
   return crypto.randomBytes(bytes).toString("base64url");
-}
-
-function compareText(left: string, right: string) {
-  const leftHash = crypto.createHash("sha256").update(left).digest();
-  const rightHash = crypto.createHash("sha256").update(right).digest();
-  return crypto.timingSafeEqual(leftHash, rightHash);
 }
 
 function safeDecodeCookiePart(value: string) {
@@ -85,119 +110,233 @@ function clearSessionCookie(res: Response) {
   });
 }
 
-function pruneExpiredSessions() {
-  const now = Date.now();
-  sessions.forEach((session, key) => {
-    if (session.expiresAt <= now) {
-      sessions.delete(key);
-    }
-  });
+function expiryDate() {
+  return new Date(Date.now() + env.SESSION_TTL_MINUTES * 60 * 1000);
 }
 
-function readSession(req: Request) {
+function userResponse(context: AuthContext) {
+  return {
+    id: context.userId,
+    email: context.email,
+    displayName: context.displayName,
+    role: context.role,
+  };
+}
+
+async function createSession(
+  context: Omit<AuthContext, "csrfToken" | "expiresAt">,
+) {
+  const token = randomToken();
+  const csrfToken = randomToken();
+  const expiresAt = expiryDate();
+  await SessionModel.create({
+    tokenHash: hashToken(token),
+    userId: context.userId,
+    organizationId: context.organizationId,
+    csrfToken,
+    expiresAt,
+  });
+  return { token, csrfToken, expiresAt };
+}
+
+async function readSession(req: Request): Promise<AuthContext | null> {
   const token = parseCookies(req)[SESSION_COOKIE];
   if (!token) {
     return null;
   }
 
-  const key = hmac(token);
-  const session = sessions.get(key);
+  const session = (await SessionModel.findOne({ tokenHash: hashToken(token) })
+    .select("+csrfToken")
+    .lean()) as SessionRecord | null;
   if (!session) {
     return null;
   }
 
-  if (session.expiresAt <= Date.now()) {
-    sessions.delete(key);
+  if (session.expiresAt <= new Date()) {
+    await SessionModel.deleteOne({ _id: session._id });
     return null;
   }
 
-  return { key, session, token };
-}
+  const user = await UserModel.findOne({
+    _id: session.userId,
+    organizationId: session.organizationId,
+    status: "active",
+  }).lean();
+  if (!user) {
+    await SessionModel.deleteOne({ _id: session._id });
+    return null;
+  }
 
-function authResponse(session: Session | null) {
+  const organization = await OrganizationModel.findOne({
+    _id: user.organizationId,
+    status: "active",
+  }).lean();
+  if (!organization) {
+    return null;
+  }
+
   return {
-    authRequired: env.AUTH_REQUIRED,
-    authenticated: !env.AUTH_REQUIRED || Boolean(session),
-    user: session?.user || (env.AUTH_REQUIRED ? null : "development"),
-    csrfToken: session?.csrfToken || null,
-    sessionExpiresAt: session
-      ? new Date(session.expiresAt).toISOString()
-      : null,
+    userId: String(user._id),
+    organizationId: String(user.organizationId),
+    organizationName: organization.name,
+    email: user.email,
+    displayName: user.displayName || user.email,
+    role: "owner",
+    csrfToken: session.csrfToken,
+    expiresAt: session.expiresAt,
   };
 }
 
-export const authStatus: RequestHandler = (req, res) => {
-  const record = env.AUTH_REQUIRED ? readSession(req) : null;
-  res.json(authResponse(record?.session || null));
-};
+async function extendSession(
+  req: Request,
+  res: Response,
+  context: AuthContext,
+) {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  if (!token) {
+    return;
+  }
 
-export const login: RequestHandler = (req, res, next) => {
+  const expiresAt = expiryDate();
+  await SessionModel.updateOne(
+    { tokenHash: hashToken(token), userId: context.userId },
+    { $set: { expiresAt } },
+  );
+  context.expiresAt = expiresAt;
+  setSessionCookie(res, token);
+}
+
+function authResponse(context: AuthContext | null) {
+  return {
+    authRequired: true,
+    authenticated: Boolean(context),
+    user: context ? userResponse(context) : null,
+    organization: context
+      ? {
+          id: context.organizationId,
+          name: context.organizationName,
+          role: context.role,
+        }
+      : null,
+    csrfToken: context?.csrfToken || null,
+    sessionExpiresAt: context ? context.expiresAt.toISOString() : null,
+  };
+}
+
+export async function sendUserSession(
+  res: Response,
+  context: UserSessionContext,
+) {
+  const session = await createSession(context);
+  setSessionCookie(res, session.token);
+  res.json(
+    authResponse({
+      ...context,
+      csrfToken: session.csrfToken,
+      expiresAt: session.expiresAt,
+    }),
+  );
+}
+
+export function getAuthContext(res: Response) {
+  const context = res.locals.authContext as AuthContext | undefined;
+  if (!context) {
+    throw new ApiError(401, "Authentication required");
+  }
+  return context;
+}
+
+export const authStatus: RequestHandler = async (req, res, next) => {
   try {
-    if (!env.AUTH_REQUIRED) {
-      res.json(authResponse(null));
-      return;
-    }
-
-    const credentials = loginSchema.parse(req.body);
-    const password = env.ADMIN_PASSWORD || "";
-    const validUser = compareText(credentials.username, env.ADMIN_USERNAME);
-    const validPassword = compareText(credentials.password, password);
-
-    if (!validUser || !validPassword) {
-      throw new ApiError(401, "Invalid username or password");
-    }
-
-    pruneExpiredSessions();
-    const token = randomToken();
-    const session: Session = {
-      csrfToken: randomToken(),
-      expiresAt: Date.now() + env.SESSION_TTL_MINUTES * 60 * 1000,
-      user: env.ADMIN_USERNAME,
-    };
-    sessions.set(hmac(token), session);
-    setSessionCookie(res, token);
-    res.json(authResponse(session));
+    const context = await readSession(req);
+    res.json(authResponse(context));
   } catch (error) {
     next(error);
   }
 };
 
-export const logout: RequestHandler = (req, res) => {
-  const record = env.AUTH_REQUIRED ? readSession(req) : null;
-  if (record) {
-    sessions.delete(record.key);
+export const login: RequestHandler = async (req, res, next) => {
+  try {
+    const credentials = loginSchema.parse(req.body);
+    const user = await UserModel.findOne({
+      email: credentials.email,
+      status: "active",
+    }).select("+passwordHash");
+
+    const validPassword = user
+      ? await verifyPassword(credentials.password, user.passwordHash)
+      : await hashPassword(credentials.password).then(() => false);
+    if (!user || !validPassword) {
+      throw new ApiError(401, "Invalid email or password");
+    }
+
+    const organization = await OrganizationModel.findOne({
+      _id: user.organizationId,
+      status: "active",
+    }).lean();
+    if (!organization) {
+      throw new ApiError(401, "Invalid email or password");
+    }
+
+    await SessionModel.deleteMany({ userId: user._id });
+    user.lastLoginAt = new Date();
+    await user.save();
+    await sendUserSession(res, {
+      userId: String(user._id),
+      organizationId: String(user.organizationId),
+      organizationName: organization.name,
+      email: user.email,
+      displayName: user.displayName || user.email,
+      role: "owner",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logout: RequestHandler = async (req, res) => {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  if (token) {
+    await SessionModel.deleteOne({ tokenHash: hashToken(token) });
   }
   clearSessionCookie(res);
   res.status(204).send();
 };
 
-export const requireAuth: RequestHandler = (req, res, next) => {
-  if (!env.AUTH_REQUIRED) {
+export const requireAuth: RequestHandler = async (req, res, next) => {
+  try {
+    const context = await readSession(req);
+    if (!context) {
+      throw new ApiError(401, "Authentication required");
+    }
+
+    await extendSession(req, res, context);
+    res.locals.authContext = context;
     next();
-    return;
+  } catch (error) {
+    next(error);
   }
-
-  const record = readSession(req);
-  if (!record) {
-    next(new ApiError(401, "Authentication required"));
-    return;
-  }
-
-  record.session.expiresAt = Date.now() + env.SESSION_TTL_MINUTES * 60 * 1000;
-  setSessionCookie(res, record.token);
-  res.locals.authSession = record.session;
-  next();
 };
 
 export const requireCsrf: RequestHandler = (req, res, next) => {
-  if (!env.AUTH_REQUIRED || SAFE_METHODS.has(req.method)) {
+  if (SAFE_METHODS.has(req.method)) {
     next();
     return;
   }
 
-  const session = res.locals.authSession as Session | undefined;
+  const context = res.locals.authContext as AuthContext | undefined;
   const csrfToken = req.get("x-csrf-token") || "";
-  if (!session || !compareText(csrfToken, session.csrfToken)) {
+  if (!context || !csrfToken) {
+    next(new ApiError(403, "Invalid security token"));
+    return;
+  }
+
+  const expected = Buffer.from(context.csrfToken);
+  const actual = Buffer.from(csrfToken);
+  if (
+    expected.length !== actual.length ||
+    !crypto.timingSafeEqual(expected, actual)
+  ) {
     next(new ApiError(403, "Invalid security token"));
     return;
   }

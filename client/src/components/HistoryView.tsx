@@ -1,7 +1,19 @@
-import { Ban, Download, Edit3, FileSpreadsheet, RotateCcw, Search } from "lucide-react";
+import {
+  Ban,
+  Download,
+  Edit3,
+  FileSpreadsheet,
+  RotateCcw,
+  Search,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import type { Invoice, InvoiceFilters, InvoiceListItem, Settings } from "../types";
+import type {
+  Invoice,
+  InvoiceFilters,
+  InvoiceListItem,
+  Settings,
+} from "../types";
 import { formatCurrency } from "../utils/calculations";
 import { formatDate } from "../utils/dates";
 import { buildInvoicePdf, resolveLogoDataUrl } from "../utils/pdf";
@@ -18,10 +30,15 @@ const defaultFilters: InvoiceFilters = {
   to: "",
   gst: "",
   status: "",
-  search: ""
+  search: "",
 };
 
-export function HistoryView({ settings, refreshKey, onEdit, showToast }: HistoryViewProps) {
+export function HistoryView({
+  settings,
+  refreshKey,
+  onEdit,
+  showToast,
+}: HistoryViewProps) {
   const [filters, setFilters] = useState<InvoiceFilters>(defaultFilters);
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +48,9 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
     try {
       setInvoices(await api.listInvoices(activeFilters));
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Could not load invoices.");
+      showToast(
+        error instanceof Error ? error.message : "Could not load invoices.",
+      );
     } finally {
       setLoading(false);
     }
@@ -43,10 +62,16 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
   }, [refreshKey]);
 
   const summary = useMemo(() => {
-    const activeInvoices = invoices.filter((invoice) => invoice.status !== "cancelled");
-    const total = activeInvoices.reduce((sum, invoice) => sum + invoice.netTotal, 0);
+    const activeInvoices = invoices.filter(
+      (invoice) => invoice.status !== "cancelled",
+    );
+    const total = activeInvoices.reduce(
+      (sum, invoice) => sum + invoice.netTotal,
+      0,
+    );
     const gstCount = activeInvoices.filter(
-      (invoice) => invoice.totalCGST + invoice.totalSGST + invoice.totalIGST > 0
+      (invoice) =>
+        invoice.totalCGST + invoice.totalSGST + invoice.totalIGST > 0,
     ).length;
     return { count: activeInvoices.length, total, gstCount };
   }, [invoices]);
@@ -70,7 +95,9 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
     try {
       onEdit(await api.getInvoice(invNo));
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Could not load invoice.");
+      showToast(
+        error instanceof Error ? error.message : "Could not load invoice.",
+      );
     }
   };
 
@@ -83,7 +110,9 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
       await loadInvoices();
       showToast(`Invoice ${invNo} cancelled.`);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Could not cancel invoice.");
+      showToast(
+        error instanceof Error ? error.message : "Could not cancel invoice.",
+      );
     }
   };
 
@@ -100,15 +129,29 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
       <section className="filter-band">
         <div className="field compact">
           <label>From</label>
-          <input className="input" type="date" value={filters.from} onChange={(event) => updateFilter("from", event.target.value)} />
+          <input
+            className="input"
+            type="date"
+            value={filters.from}
+            onChange={(event) => updateFilter("from", event.target.value)}
+          />
         </div>
         <div className="field compact">
           <label>To</label>
-          <input className="input" type="date" value={filters.to} onChange={(event) => updateFilter("to", event.target.value)} />
+          <input
+            className="input"
+            type="date"
+            value={filters.to}
+            onChange={(event) => updateFilter("to", event.target.value)}
+          />
         </div>
         <div className="field compact">
           <label>GST Status</label>
-          <select className="input" value={filters.gst} onChange={(event) => updateFilter("gst", event.target.value)}>
+          <select
+            className="input"
+            value={filters.gst}
+            onChange={(event) => updateFilter("gst", event.target.value)}
+          >
             <option value="">All</option>
             <option value="yes">GST Applied</option>
             <option value="no">No GST</option>
@@ -116,7 +159,11 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
         </div>
         <div className="field compact">
           <label>Invoice Status</label>
-          <select className="input" value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}>
+          <select
+            className="input"
+            value={filters.status}
+            onChange={(event) => updateFilter("status", event.target.value)}
+          >
             <option value="">All</option>
             <option value="active">Active</option>
             <option value="cancelled">Cancelled</option>
@@ -126,10 +173,18 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
           <label>Search</label>
           <div className="input-with-icon">
             <Search size={15} />
-            <input value={filters.search} onChange={(event) => updateFilter("search", event.target.value)} placeholder="Invoice no. or payee" />
+            <input
+              value={filters.search}
+              onChange={(event) => updateFilter("search", event.target.value)}
+              placeholder="Invoice no. or payee"
+            />
           </div>
         </div>
-        <button className="btn btn-primary" type="button" onClick={() => void loadInvoices()}>
+        <button
+          className="btn btn-primary"
+          type="button"
+          onClick={() => void loadInvoices()}
+        >
           <Search size={16} />
           Search
         </button>
@@ -159,7 +214,11 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
           <span>GST invoices</span>
           <strong>{summary.gstCount}</strong>
         </div>
-        <button className="btn btn-outline" type="button" onClick={() => void exportCsv()}>
+        <button
+          className="btn btn-outline"
+          type="button"
+          onClick={() => void exportCsv()}
+        >
           <FileSpreadsheet size={16} />
           Export CSV
         </button>
@@ -170,13 +229,19 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
           <div className="empty-state">Loading invoices...</div>
         ) : invoices.length ? (
           invoices.map((invoice) => {
-            const hasGst = invoice.totalCGST + invoice.totalSGST + invoice.totalIGST > 0;
+            const hasGst =
+              invoice.totalCGST + invoice.totalSGST + invoice.totalIGST > 0;
             return (
-              <article className={`invoice-item ${invoice.status === "cancelled" ? "cancelled" : ""}`} key={invoice.invNo}>
+              <article
+                className={`invoice-item ${invoice.status === "cancelled" ? "cancelled" : ""}`}
+                key={invoice.invNo}
+              >
                 <div className="invoice-left">
                   <div className="invoice-number">
                     {invoice.invNo}
-                    {invoice.status === "cancelled" ? <span className="status-badge danger">Cancelled</span> : null}
+                    {invoice.status === "cancelled" ? (
+                      <span className="status-badge danger">Cancelled</span>
+                    ) : null}
                   </div>
                   <div className="invoice-party">{invoice.partyName}</div>
                   <div className="invoice-meta">
@@ -184,19 +249,35 @@ export function HistoryView({ settings, refreshKey, onEdit, showToast }: History
                   </div>
                 </div>
                 <div className="invoice-right">
-                  <span className={`gst-pill ${hasGst ? "on" : "off"}`}>{hasGst ? "GST" : "No GST"}</span>
-                  <div className="invoice-amount">{formatCurrency(invoice.netTotal)}</div>
-                  <button className="btn btn-outline btn-small" type="button" onClick={() => redownload(invoice.invNo)}>
+                  <span className={`gst-pill ${hasGst ? "on" : "off"}`}>
+                    {hasGst ? "GST" : "No GST"}
+                  </span>
+                  <div className="invoice-amount">
+                    {formatCurrency(invoice.netTotal)}
+                  </div>
+                  <button
+                    className="btn btn-outline btn-small"
+                    type="button"
+                    onClick={() => redownload(invoice.invNo)}
+                  >
                     <Download size={15} />
                     PDF
                   </button>
                   {invoice.status !== "cancelled" ? (
                     <>
-                      <button className="btn btn-outline btn-small" type="button" onClick={() => edit(invoice.invNo)}>
+                      <button
+                        className="btn btn-outline btn-small"
+                        type="button"
+                        onClick={() => edit(invoice.invNo)}
+                      >
                         <Edit3 size={15} />
                         Edit
                       </button>
-                      <button className="icon-button danger" type="button" onClick={() => cancel(invoice.invNo)}>
+                      <button
+                        className="icon-button danger"
+                        type="button"
+                        onClick={() => cancel(invoice.invNo)}
+                      >
                         <Ban size={16} />
                       </button>
                     </>

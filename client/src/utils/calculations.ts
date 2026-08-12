@@ -1,4 +1,9 @@
-import type { Adjustment, AdjustmentInput, CalculatedLineItem, LineItemInput } from "../types";
+import type {
+  Adjustment,
+  AdjustmentInput,
+  CalculatedLineItem,
+  LineItemInput,
+} from "../types";
 
 export type InvoiceTotals = {
   lineItems: CalculatedLineItem[];
@@ -13,7 +18,8 @@ export type InvoiceTotals = {
   netTotal: number;
 };
 
-export const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+export const round2 = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
 
 const toNumber = (value: number | string | undefined) => Number(value) || 0;
 
@@ -22,7 +28,8 @@ export function calculateLineItem(item: LineItemInput): CalculatedLineItem {
   const rate = toNumber(item.rate);
   const totalTaxRate = (item.cgstRate + item.sgstRate + item.igstRate) / 100;
   const gross = units * rate;
-  const taxable = item.taxInclusive && totalTaxRate > 0 ? gross / (1 + totalTaxRate) : gross;
+  const taxable =
+    item.taxInclusive && totalTaxRate > 0 ? gross / (1 + totalTaxRate) : gross;
   const cgstAmount = taxable * (item.cgstRate / 100);
   const sgstAmount = taxable * (item.sgstRate / 100);
   const igstAmount = taxable * (item.igstRate / 100);
@@ -44,29 +51,44 @@ export function calculateLineItem(item: LineItemInput): CalculatedLineItem {
     sgstAmount: round2(sgstAmount),
     igstAmount: round2(igstAmount),
     taxTotal: round2(taxTotal),
-    total: round2(taxable + taxTotal)
+    total: round2(taxable + taxTotal),
   };
 }
 
-export function calculateInvoiceTotals(items: LineItemInput[], adjustments: AdjustmentInput[]): InvoiceTotals {
+export function calculateInvoiceTotals(
+  items: LineItemInput[],
+  adjustments: AdjustmentInput[],
+): InvoiceTotals {
   const lineItems = items.map(calculateLineItem);
   const calculatedAdjustments = adjustments.map((adjustment) => ({
     desc: adjustment.desc,
     amount: round2(toNumber(adjustment.amount)),
-    type: adjustment.type
+    type: adjustment.type,
   }));
-  const totalTaxable = round2(lineItems.reduce((sum, item) => sum + item.taxable, 0));
-  const totalCGST = round2(lineItems.reduce((sum, item) => sum + item.cgstAmount, 0));
-  const totalSGST = round2(lineItems.reduce((sum, item) => sum + item.sgstAmount, 0));
-  const totalIGST = round2(lineItems.reduce((sum, item) => sum + item.igstAmount, 0));
-  const grandTotal = round2(lineItems.reduce((sum, item) => sum + item.total, 0));
+  const totalTaxable = round2(
+    lineItems.reduce((sum, item) => sum + item.taxable, 0),
+  );
+  const totalCGST = round2(
+    lineItems.reduce((sum, item) => sum + item.cgstAmount, 0),
+  );
+  const totalSGST = round2(
+    lineItems.reduce((sum, item) => sum + item.sgstAmount, 0),
+  );
+  const totalIGST = round2(
+    lineItems.reduce((sum, item) => sum + item.igstAmount, 0),
+  );
+  const grandTotal = round2(
+    lineItems.reduce((sum, item) => sum + item.total, 0),
+  );
   const addTotal = round2(
-    calculatedAdjustments.filter((adjustment) => adjustment.type === "add").reduce((sum, item) => sum + item.amount, 0)
+    calculatedAdjustments
+      .filter((adjustment) => adjustment.type === "add")
+      .reduce((sum, item) => sum + item.amount, 0),
   );
   const deductTotal = round2(
     calculatedAdjustments
       .filter((adjustment) => adjustment.type === "deduct")
-      .reduce((sum, item) => sum + item.amount, 0)
+      .reduce((sum, item) => sum + item.amount, 0),
   );
 
   return {
@@ -79,14 +101,14 @@ export function calculateInvoiceTotals(items: LineItemInput[], adjustments: Adju
     grandTotal,
     addTotal,
     deductTotal,
-    netTotal: round2(grandTotal + addTotal - deductTotal)
+    netTotal: round2(grandTotal + addTotal - deductTotal),
   };
 }
 
 export function formatCurrency(value: number | string | undefined) {
   return `Rs. ${toNumber(value).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   })}`;
 }
 
@@ -116,12 +138,25 @@ export function numWords(value: number) {
     "Sixteen",
     "Seventeen",
     "Eighteen",
-    "Nineteen"
+    "Nineteen",
   ];
-  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const tens = [
+    "",
+    "",
+    "Twenty",
+    "Thirty",
+    "Forty",
+    "Fifty",
+    "Sixty",
+    "Seventy",
+    "Eighty",
+    "Ninety",
+  ];
 
   const underHundred = (num: number): string =>
-    num < 20 ? ones[num] : `${tens[Math.floor(num / 10)]}${num % 10 ? ` ${ones[num % 10]}` : ""}`;
+    num < 20
+      ? ones[num]
+      : `${tens[Math.floor(num / 10)]}${num % 10 ? ` ${ones[num % 10]}` : ""}`;
 
   const underThousand = (num: number): string => {
     if (num < 100) {
@@ -138,7 +173,7 @@ export function numWords(value: number) {
     crore ? `${underThousand(crore)} Crore` : "",
     lakh ? `${underThousand(lakh)} Lakh` : "",
     thousand ? `${underThousand(thousand)} Thousand` : "",
-    rest ? underThousand(rest) : ""
+    rest ? underThousand(rest) : "",
   ]
     .filter(Boolean)
     .join(" ");

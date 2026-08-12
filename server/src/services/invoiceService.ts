@@ -1,11 +1,9 @@
 import { Types } from "mongoose";
 import { ApiError } from "../middleware/errorHandler.js";
 import { AuditLogModel } from "../models/AuditLog.js";
-import { BusinessProfileModel } from "../models/BusinessProfile.js";
 import { CounterModel } from "../models/Counter.js";
 import { InvoiceModel } from "../models/Invoice.js";
 import { InvoiceDraftModel } from "../models/InvoiceDraft.js";
-import { SettingModel } from "../models/Setting.js";
 import { calculateInvoiceTotals } from "../utils/calculateInvoice.js";
 import { toCsv } from "../utils/csv.js";
 import { todayLocalIso, toInvoiceMonth } from "../utils/date.js";
@@ -15,6 +13,12 @@ import type {
   InvoiceWorkbenchQuery,
 } from "../validation/invoiceSchemas.js";
 import { getBusinessProfileSnapshot } from "./settingsService.js";
+
+export type TenantContext = {
+  organizationId: string;
+  userId: string;
+  userEmail: string;
+};
 
 type PersistedWorkflowStatus =
   "draft" | "checkedIn" | "checkedOut" | "cancelled";
@@ -60,8 +64,8 @@ function buildInvoiceNo(prefix: string, month: string, sequence: number) {
   return `${prefix}-${month}-${String(sequence).padStart(4, "0")}`;
 }
 
-function counterScope(prefix: string, month: string) {
-  return `${prefix}-${month}`;
+function counterScope(organizationId: string, prefix: string, month: string) {
+  return `${organizationId}:${prefix}-${month}`;
 }
 
 function defaultWorkflowStatus(invoice: {
@@ -91,6 +95,7 @@ function toPlainDocument(document: AuditDocument | null | undefined) {
 }
 
 async function writeAuditLog(
+  tenant: TenantContext,
   entityType: string,
   entityId: unknown,
   action: string,
@@ -98,47 +103,63 @@ async function writeAuditLog(
   after: unknown,
 ) {
   await AuditLogModel.create({
+    organizationId: tenant.organizationId,
+    actorUserId: tenant.userId,
     entityType,
     entityId: String(entityId),
     action,
     before,
     after,
-    createdBy: "system",
+    createdBy: tenant.userEmail,
   }).catch(() => undefined);
 }
 
-export async function peekInvoiceNumber(prefix: string, invoiceDate?: string) {
+export async function peekInvoiceNumber(
+  tenant: TenantContext,
+  prefix: string,
+  invoiceDate?: string,
+) {
   const safePrefix = prefix.toUpperCase();
   const month = toInvoiceMonth(invoiceDate);
   const row = await CounterModel.findOne({
-    scope: counterScope(safePrefix, month),
+    organizationId: tenant.organizationId,
+    scope: counterScope(tenant.organizationId, safePrefix, month),
   }).lean();
   return buildInvoiceNo(safePrefix, month, (row?.sequence || 0) + 1);
 }
 
-async function consumeInvoiceNumber(prefix: string, invoiceDate?: string) {
+async function consumeInvoiceNumber(
+  tenant: TenantContext,
+  prefix: string,
+  invoiceDate?: string,
+) {
   const safePrefix = prefix.toUpperCase();
   const month = toInvoiceMonth(invoiceDate);
-  const scope = counterScope(safePrefix, month);
+  const scope = counterScope(tenant.organizationId, safePrefix, month);
   const row = await CounterModel.findOneAndUpdate(
-    { scope },
+    { organizationId: tenant.organizationId, scope },
     {
-      $setOnInsert: { scope, prefix: safePrefix, period: month },
+      $setOnInsert: {
+        organizationId: tenant.organizationId,
+        scope,
+        prefix: safePrefix,
+        period: month,
+      },
       $inc: { sequence: 1 },
     },
     { upsert: true, new: true },
   ).lean();
-  const sequence = row.sequence;
 
   return {
-    invNo: buildInvoiceNo(safePrefix, month, sequence),
+    invNo: buildInvoiceNo(safePrefix, month, row.sequence),
     invoicePrefix: safePrefix,
     invoiceMonth: month,
-    sequenceNo: sequence,
+    sequenceNo: row.sequence,
   };
 }
 
 async function resolveSnapshots(
+  tenant: TenantContext,
   source?: SnapshotSource,
 ): Promise<ResolvedSnapshots> {
   if (source?.presetSnapshot && source.businessSnapshot) {
@@ -149,36 +170,47 @@ async function resolveSnapshots(
     };
   }
 
-  return getBusinessProfileSnapshot();
+  return getBusinessProfileSnapshot(tenant.organizationId);
 }
 
 function buildInvoiceDocument(
+  tenant: TenantContext,
   payload: InvoicePayload,
   snapshots: ResolvedSnapshots,
 ) {
   const totals = calculateInvoiceTotals(payload.lineItems, payload.adjustments);
-
   return {
     ...payload,
     ...totals,
+    organizationId: tenant.organizationId,
     businessProfileId: snapshots.businessProfileId,
     presetSnapshot: snapshots.presetSnapshot,
     businessSnapshot: snapshots.businessSnapshot,
+    createdBy: tenant.userEmail,
+    createdByUserId: tenant.userId,
   };
 }
 
-export async function createInvoice(payload: InvoicePayload) {
+export async function createInvoice(
+  tenant: TenantContext,
+  payload: InvoicePayload,
+) {
   if (payload.workflowStatus === "draft") {
     throw new ApiError(422, "Use the draft endpoint to save draft invoices");
   }
 
-  const snapshots = await getBusinessProfileSnapshot();
+  const snapshots = await getBusinessProfileSnapshot(tenant.organizationId);
   const invDate = payload.invDate || todayLocalIso();
   const numbering = await consumeInvoiceNumber(
-    snapshots.presetSnapshot.invoice_prefix || "INV",
+    tenant,
+    String(snapshots.presetSnapshot.invoice_prefix || "INV"),
     invDate,
   );
-  const document = buildInvoiceDocument({ ...payload, invDate }, snapshots);
+  const document = buildInvoiceDocument(
+    tenant,
+    { ...payload, invDate },
+    snapshots,
+  );
   const invoice = await InvoiceModel.create({
     ...document,
     ...numbering,
@@ -186,6 +218,7 @@ export async function createInvoice(payload: InvoicePayload) {
     recordStatus: "active",
   });
   await writeAuditLog(
+    tenant,
     "invoice",
     invoice._id,
     "create",
@@ -195,15 +228,20 @@ export async function createInvoice(payload: InvoicePayload) {
   return invoice;
 }
 
-export async function createInvoiceDraft(payload: InvoicePayload) {
-  const snapshots = await getBusinessProfileSnapshot();
+export async function createInvoiceDraft(
+  tenant: TenantContext,
+  payload: InvoicePayload,
+) {
+  const snapshots = await getBusinessProfileSnapshot(tenant.organizationId);
   const invDate = payload.invDate || todayLocalIso();
   const document = buildInvoiceDocument(
+    tenant,
     { ...payload, invDate, workflowStatus: "draft" },
     snapshots,
   );
   const draft = await InvoiceDraftModel.create(document);
   await writeAuditLog(
+    tenant,
     "invoice_draft",
     draft._id,
     "create",
@@ -214,28 +252,33 @@ export async function createInvoiceDraft(payload: InvoicePayload) {
 }
 
 export async function updateInvoiceDraft(
+  tenant: TenantContext,
   draftId: string,
   payload: InvoicePayload,
 ) {
   ensureObjectId(draftId);
-  const draft = await InvoiceDraftModel.findById(draftId);
-
+  const draft = await InvoiceDraftModel.findOne({
+    _id: draftId,
+    organizationId: tenant.organizationId,
+  });
   if (!draft) {
     throw new ApiError(404, "Draft not found");
   }
 
   const before = toPlainDocument(draft);
-  const snapshots = await resolveSnapshots(draft as SnapshotSource);
+  const snapshots = await resolveSnapshots(tenant, draft as SnapshotSource);
   const invDate = payload.invDate || draft.invDate || todayLocalIso();
 
   if (payload.workflowStatus === "draft") {
     const document = buildInvoiceDocument(
+      tenant,
       { ...payload, invDate, workflowStatus: "draft" },
       snapshots,
     );
     Object.assign(draft, document);
     await draft.save();
     await writeAuditLog(
+      tenant,
       "invoice_draft",
       draft._id,
       "update",
@@ -246,10 +289,15 @@ export async function updateInvoiceDraft(
   }
 
   const numbering = await consumeInvoiceNumber(
+    tenant,
     String(snapshots.presetSnapshot.invoice_prefix || "INV"),
     invDate,
   );
-  const document = buildInvoiceDocument({ ...payload, invDate }, snapshots);
+  const document = buildInvoiceDocument(
+    tenant,
+    { ...payload, invDate },
+    snapshots,
+  );
   const invoice = await InvoiceModel.create({
     ...document,
     ...numbering,
@@ -257,8 +305,12 @@ export async function updateInvoiceDraft(
     status: "active",
     recordStatus: "active",
   });
-  await InvoiceDraftModel.deleteOne({ _id: draft._id });
+  await InvoiceDraftModel.deleteOne({
+    _id: draft._id,
+    organizationId: tenant.organizationId,
+  });
   await writeAuditLog(
+    tenant,
     "invoice",
     invoice._id,
     "convert_draft",
@@ -268,8 +320,10 @@ export async function updateInvoiceDraft(
   return invoice;
 }
 
-export async function listInvoiceDrafts() {
-  const drafts = await InvoiceDraftModel.find({})
+export async function listInvoiceDrafts(tenant: TenantContext) {
+  const drafts = await InvoiceDraftModel.find({
+    organizationId: tenant.organizationId,
+  })
     .sort({ createdAt: -1 })
     .lean();
   return drafts.map((draft) => ({
@@ -288,24 +342,37 @@ export async function listInvoiceDrafts() {
   }));
 }
 
-export async function getInvoiceDraft(draftId: string) {
+export async function getInvoiceDraft(tenant: TenantContext, draftId: string) {
   ensureObjectId(draftId);
-  const draft = await InvoiceDraftModel.findById(draftId).lean();
+  const draft = await InvoiceDraftModel.findOne({
+    _id: draftId,
+    organizationId: tenant.organizationId,
+  }).lean();
   if (!draft) {
     throw new ApiError(404, "Draft not found");
   }
   return draft;
 }
 
-export async function deleteInvoiceDraft(draftId: string) {
+export async function deleteInvoiceDraft(
+  tenant: TenantContext,
+  draftId: string,
+) {
   ensureObjectId(draftId);
-  const draft = await InvoiceDraftModel.findById(draftId);
+  const draft = await InvoiceDraftModel.findOne({
+    _id: draftId,
+    organizationId: tenant.organizationId,
+  });
   if (!draft) {
     throw new ApiError(404, "Draft not found");
   }
 
-  await InvoiceDraftModel.deleteOne({ _id: draftId });
+  await InvoiceDraftModel.deleteOne({
+    _id: draft._id,
+    organizationId: tenant.organizationId,
+  });
   await writeAuditLog(
+    tenant,
     "invoice_draft",
     draftId,
     "delete",
@@ -314,8 +381,15 @@ export async function deleteInvoiceDraft(draftId: string) {
   );
 }
 
-export async function updateInvoice(invNo: string, payload: InvoicePayload) {
-  const invoice = await InvoiceModel.findOne({ invNo });
+export async function updateInvoice(
+  tenant: TenantContext,
+  invNo: string,
+  payload: InvoicePayload,
+) {
+  const invoice = await InvoiceModel.findOne({
+    organizationId: tenant.organizationId,
+    invNo,
+  });
   if (!invoice) {
     throw new ApiError(404, "Invoice not found");
   }
@@ -324,14 +398,16 @@ export async function updateInvoice(invNo: string, payload: InvoicePayload) {
   }
 
   const before = toPlainDocument(invoice);
-  const snapshots = await resolveSnapshots(invoice as SnapshotSource);
+  const snapshots = await resolveSnapshots(tenant, invoice as SnapshotSource);
   const document = buildInvoiceDocument(
+    tenant,
     { ...payload, invDate: invoice.invDate },
     snapshots,
   );
   Object.assign(invoice, { ...document, recordStatus: invoice.status });
   await invoice.save();
   await writeAuditLog(
+    tenant,
     "invoice",
     invoice._id,
     "update",
@@ -341,8 +417,10 @@ export async function updateInvoice(invNo: string, payload: InvoicePayload) {
   return invoice;
 }
 
-function invoiceFilters(query: InvoiceQuery) {
-  const filters: Record<string, unknown> = {};
+function invoiceFilters(tenant: TenantContext, query: InvoiceQuery) {
+  const filters: Record<string, unknown> = {
+    organizationId: tenant.organizationId,
+  };
   if (query.from || query.to) {
     filters.invDate = {
       ...(query.from ? { $gte: query.from } : {}),
@@ -380,8 +458,8 @@ function matchesGstFilter(
   return gst === "yes" ? hasGst : !hasGst;
 }
 
-export async function listInvoices(query: InvoiceQuery) {
-  const invoices = await InvoiceModel.find(invoiceFilters(query))
+export async function listInvoices(tenant: TenantContext, query: InvoiceQuery) {
+  const invoices = await InvoiceModel.find(invoiceFilters(tenant, query))
     .sort({ createdAt: -1 })
     .lean();
   return invoices
@@ -434,21 +512,27 @@ function emptyWorkbenchCounts() {
   } satisfies Record<InvoiceWorkbenchStatus, number>;
 }
 
-export async function listInvoiceWorkbench(query: InvoiceWorkbenchQuery) {
+export async function listInvoiceWorkbench(
+  tenant: TenantContext,
+  query: InvoiceWorkbenchQuery,
+) {
   const [drafts, invoices] = await Promise.all([
-    InvoiceDraftModel.find({}).sort({ createdAt: -1 }).lean(),
-    InvoiceModel.find({}).sort({ createdAt: -1 }).lean(),
+    InvoiceDraftModel.find({ organizationId: tenant.organizationId })
+      .sort({ createdAt: -1 })
+      .lean(),
+    InvoiceModel.find({ organizationId: tenant.organizationId })
+      .sort({ createdAt: -1 })
+      .lean(),
   ]);
   const rows = [
     ...drafts.map(draftWorkbenchRow),
     ...invoices.map(invoiceWorkbenchRow),
-  ].sort((a, b) => {
-    const left = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const right = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return right - left;
+  ].sort((left, right) => {
+    const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return rightTime - leftTime;
   });
   const counts = emptyWorkbenchCounts();
-
   rows.forEach((row) => {
     counts.all += 1;
     counts[row.workflowStatus] += 1;
@@ -463,8 +547,11 @@ export async function listInvoiceWorkbench(query: InvoiceWorkbenchQuery) {
   };
 }
 
-export async function getInvoice(invNo: string) {
-  const invoice = await InvoiceModel.findOne({ invNo }).lean();
+export async function getInvoice(tenant: TenantContext, invNo: string) {
+  const invoice = await InvoiceModel.findOne({
+    organizationId: tenant.organizationId,
+    invNo,
+  }).lean();
   if (!invoice) {
     throw new ApiError(404, "Invoice not found");
   }
@@ -475,8 +562,11 @@ export async function getInvoice(invNo: string) {
   };
 }
 
-export async function cancelInvoice(invNo: string) {
-  const invoice = await InvoiceModel.findOne({ invNo });
+export async function cancelInvoice(tenant: TenantContext, invNo: string) {
+  const invoice = await InvoiceModel.findOne({
+    organizationId: tenant.organizationId,
+    invNo,
+  });
   if (!invoice) {
     throw new ApiError(404, "Invoice not found");
   }
@@ -488,6 +578,7 @@ export async function cancelInvoice(invNo: string) {
   invoice.cancelledAt = new Date();
   await invoice.save();
   await writeAuditLog(
+    tenant,
     "invoice",
     invoice._id,
     "cancel",
@@ -497,9 +588,12 @@ export async function cancelInvoice(invNo: string) {
   return invoice;
 }
 
-export async function exportInvoicesCsv(query: InvoiceQuery) {
+export async function exportInvoicesCsv(
+  tenant: TenantContext,
+  query: InvoiceQuery,
+) {
   const invoices = await InvoiceModel.find(
-    invoiceFilters({ ...query, status: query.status || "active" }),
+    invoiceFilters(tenant, { ...query, status: query.status || "active" }),
   )
     .sort({ invDate: -1 })
     .lean();
@@ -533,13 +627,19 @@ export async function exportInvoicesCsv(query: InvoiceQuery) {
   );
 }
 
-export async function clearDatabase() {
+export async function clearCompanyData(tenant: TenantContext) {
   await Promise.all([
-    InvoiceModel.deleteMany({}),
-    InvoiceDraftModel.deleteMany({}),
-    BusinessProfileModel.deleteMany({}),
-    SettingModel.deleteMany({}),
-    CounterModel.deleteMany({}),
-    AuditLogModel.deleteMany({}),
+    InvoiceModel.deleteMany({ organizationId: tenant.organizationId }),
+    InvoiceDraftModel.deleteMany({ organizationId: tenant.organizationId }),
+    CounterModel.deleteMany({ organizationId: tenant.organizationId }),
+    AuditLogModel.deleteMany({ organizationId: tenant.organizationId }),
   ]);
+  await writeAuditLog(
+    tenant,
+    "organization",
+    tenant.organizationId,
+    "clear_company_data",
+    null,
+    { clearedAt: new Date().toISOString() },
+  );
 }

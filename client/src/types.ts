@@ -21,10 +21,25 @@ export type Settings = {
   preset: Preset;
   logoDataUrl: string | null;
 };
+
+export type AuthenticatedUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: "owner";
+};
+
+export type CurrentOrganization = {
+  id: string;
+  name: string;
+  role: "owner";
+};
+
 export type AuthStatus = {
   authRequired: boolean;
   authenticated: boolean;
-  user: string | null;
+  user: AuthenticatedUser | null;
+  organization: CurrentOrganization | null;
   csrfToken: string | null;
   sessionExpiresAt: string | null;
 };

@@ -17,6 +17,8 @@ import {
 } from "./middleware/security.js";
 import authRoutes from "./routes/authRoutes.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
+import invitationRoutes from "./routes/invitationRoutes.js";
+import internalRoutes from "./routes/internalRoutes.js";
 import referenceDataRoutes from "./routes/referenceDataRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 
@@ -86,6 +88,7 @@ app.use(
     message: { message: "Too many requests. Try again shortly." },
   }),
 );
+app.use("/api/internal", internalRoutes);
 app.use("/api", requireTrustedOrigin);
 
 app.get("/api/health", (_req, res) => {
@@ -93,6 +96,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/invitations", invitationRoutes);
 app.use("/api/reference-data", requireAuth, referenceDataRoutes);
 app.use("/api/settings", requireAuth, requireCsrf, settingsRoutes);
 app.use("/api/invoices", requireAuth, requireCsrf, invoiceRoutes);

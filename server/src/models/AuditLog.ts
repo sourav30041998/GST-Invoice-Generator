@@ -2,6 +2,14 @@ import { Schema, model } from "mongoose";
 
 const auditLogSchema = new Schema(
   {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      immutable: true,
+      index: true,
+    },
+    actorUserId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     entityType: { type: String, required: true, trim: true, index: true },
     entityId: { type: String, required: true, trim: true, index: true },
     action: { type: String, required: true, trim: true, index: true },
@@ -13,7 +21,12 @@ const auditLogSchema = new Schema(
   { timestamps: { createdAt: true, updatedAt: false }, minimize: false },
 );
 
-auditLogSchema.index({ entityType: 1, entityId: 1, createdAt: -1 });
-auditLogSchema.index({ action: 1, createdAt: -1 });
+auditLogSchema.index({
+  organizationId: 1,
+  entityType: 1,
+  entityId: 1,
+  createdAt: -1,
+});
+auditLogSchema.index({ organizationId: 1, action: 1, createdAt: -1 });
 
 export const AuditLogModel = model("AuditLog", auditLogSchema);

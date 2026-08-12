@@ -11,6 +11,7 @@ export class ApiError extends Error {
 }
 
 type HttpError = Error & {
+  code?: number;
   status?: number;
   statusCode?: number;
   type?: string;
@@ -41,6 +42,13 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (httpError.message === "CORS origin is not allowed") {
     res.status(403).json({ message: "Request origin is not allowed" });
+    return;
+  }
+
+  if (httpError.code === 11000) {
+    res.status(409).json({
+      message: "A record with those unique details already exists",
+    });
     return;
   }
 

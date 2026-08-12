@@ -31,6 +31,14 @@ const bankDetailsSchema = new Schema(
 
 const businessProfileSchema = new Schema(
   {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      immutable: true,
+      unique: true,
+      index: true,
+    },
     profileKey: {
       type: String,
       required: true,
@@ -57,7 +65,7 @@ const businessProfileSchema = new Schema(
   { timestamps: true, minimize: false },
 );
 
-businessProfileSchema.index({ isActive: 1, updatedAt: -1 });
+businessProfileSchema.index({ organizationId: 1, isActive: 1, updatedAt: -1 });
 
 export const BusinessProfileModel = model(
   "BusinessProfile",

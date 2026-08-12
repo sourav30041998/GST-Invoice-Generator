@@ -16,7 +16,10 @@ export function AboutView({ settings }: AboutViewProps) {
           {[
             ["Business Name", preset.business_name],
             ["GSTIN", preset.gstin || "-"],
-            ["Address", `${preset.address_line1 || ""} ${preset.address_line2 || ""}`.trim()],
+            [
+              "Address",
+              `${preset.address_line1 || ""} ${preset.address_line2 || ""}`.trim(),
+            ],
             ["Phone", preset.phone || "-"],
             ["Website", preset.website || "-"],
             ["Prefix", preset.invoice_prefix],
@@ -24,9 +27,9 @@ export function AboutView({ settings }: AboutViewProps) {
               "Bank Details",
               preset.bank_acc_name
                 ? `${preset.bank_acc_name}, ${preset.bank_name || ""}, A/c: ${preset.bank_account || ""}, IFSC: ${preset.bank_ifsc || ""}`
-                : "-"
+                : "-",
             ],
-            ["UPI ID", preset.upi || "-"]
+            ["UPI ID", preset.upi || "-"],
           ].map(([label, value]) => (
             <div className="about-cell" key={label}>
               <label>{label}</label>
@@ -75,7 +78,9 @@ export function AboutView({ settings }: AboutViewProps) {
           </div>
           <div>
             <strong>Storage</strong>
-            <span>MongoDB collections for invoices, settings, and counters.</span>
+            <span>
+              MongoDB collections for invoices, settings, and counters.
+            </span>
           </div>
           <div>
             <strong>PDF</strong>

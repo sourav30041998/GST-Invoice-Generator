@@ -17,7 +17,7 @@ export const defaultPreset: Preset = {
   bank_account: "123456789012",
   bank_ifsc: "TEST0001234",
   terms:
-    "This is a sample preset for testing. Replace these details with your business information before issuing an invoice."
+    "This is a sample preset for testing. Replace these details with your business information before issuing an invoice.",
 };
 
 export const taxPresets = [
@@ -29,7 +29,7 @@ export const taxPresets = [
     sgstRate: 6,
     igstRate: 0,
     allowInclusive: false,
-    note: "Hotel accommodation up to Rs. 7,500 per unit per day"
+    note: "Hotel accommodation up to Rs. 7,500 per unit per day",
   },
   {
     key: "Rooms > Rs.7500/day",
@@ -39,7 +39,7 @@ export const taxPresets = [
     sgstRate: 9,
     igstRate: 0,
     allowInclusive: false,
-    note: "Hotel accommodation above Rs. 7,500 per unit per day"
+    note: "Hotel accommodation above Rs. 7,500 per unit per day",
   },
   {
     key: "Food Bill",
@@ -49,7 +49,7 @@ export const taxPresets = [
     sgstRate: 2.5,
     igstRate: 0,
     allowInclusive: true,
-    note: "Restaurant service other than specified premises"
+    note: "Restaurant service other than specified premises",
   },
   {
     key: "Outdoor Catering - 5%",
@@ -59,7 +59,7 @@ export const taxPresets = [
     sgstRate: 2.5,
     igstRate: 0,
     allowInclusive: true,
-    note: "Outdoor catering at premises other than specified premises"
+    note: "Outdoor catering at premises other than specified premises",
   },
   {
     key: "Specified Premises Catering - 18%",
@@ -69,7 +69,7 @@ export const taxPresets = [
     sgstRate: 9,
     igstRate: 0,
     allowInclusive: false,
-    note: "Specified premises or higher hotel accommodation premises"
+    note: "Specified premises or higher hotel accommodation premises",
   },
   {
     key: "Custom",
@@ -79,12 +79,16 @@ export const taxPresets = [
     sgstRate: 0,
     igstRate: 0,
     allowInclusive: true,
-    note: "Manual rates"
-  }
+    note: "Manual rates",
+  },
 ];
 
-export const emptyLineItem = (presetKey = "Rooms <= Rs.7500/day", date = ""): LineItemInput => {
-  const preset = taxPresets.find((item) => item.key === presetKey) || taxPresets[0];
+export const emptyLineItem = (
+  presetKey = "Rooms <= Rs.7500/day",
+  date = "",
+): LineItemInput => {
+  const preset =
+    taxPresets.find((item) => item.key === presetKey) || taxPresets[0];
   return {
     id: crypto.randomUUID(),
     presetKey: preset.key,
@@ -96,6 +100,6 @@ export const emptyLineItem = (presetKey = "Rooms <= Rs.7500/day", date = ""): Li
     cgstRate: preset.cgstRate,
     sgstRate: preset.sgstRate,
     igstRate: preset.igstRate,
-    taxInclusive: false
+    taxInclusive: false,
   };
 };

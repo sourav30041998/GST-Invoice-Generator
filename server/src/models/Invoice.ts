@@ -33,7 +33,14 @@ const adjustmentSchema = new Schema(
 
 const invoiceSchema = new Schema(
   {
-    invNo: { type: String, required: true, unique: true, trim: true },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      immutable: true,
+      index: true,
+    },
+    invNo: { type: String, required: true, trim: true },
     invoicePrefix: {
       type: String,
       default: "",
@@ -87,13 +94,15 @@ const invoiceSchema = new Schema(
     presetSnapshot: { type: Schema.Types.Mixed, required: true },
     businessSnapshot: { type: Schema.Types.Mixed, required: true },
     createdBy: { type: String, default: "system", trim: true },
+    createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true, minimize: false },
 );
 
-invoiceSchema.index({ invDate: -1 });
+invoiceSchema.index({ organizationId: 1, invNo: 1 }, { unique: true });
+invoiceSchema.index({ organizationId: 1, invDate: -1 });
 invoiceSchema.index(
-  { invoicePrefix: 1, invoiceMonth: 1, sequenceNo: 1 },
+  { organizationId: 1, invoicePrefix: 1, invoiceMonth: 1, sequenceNo: 1 },
   {
     unique: true,
     partialFilterExpression: {
@@ -103,8 +112,9 @@ invoiceSchema.index(
     },
   },
 );
-invoiceSchema.index({ workflowStatus: 1, createdAt: -1 });
+invoiceSchema.index({ organizationId: 1, workflowStatus: 1, createdAt: -1 });
 invoiceSchema.index({
+  organizationId: 1,
   partyName: "text",
   invNo: "text",
   roomNo: "text",

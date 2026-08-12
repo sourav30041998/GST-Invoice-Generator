@@ -1,22 +1,19 @@
 import { defaultPreset } from "../config/defaultPreset.js";
+import type { ClientSession } from "mongoose";
 import { BusinessProfileModel } from "../models/BusinessProfile.js";
-import { SettingModel } from "../models/Setting.js";
+import { OrganizationModel } from "../models/Organization.js";
 import type { PresetPayload } from "../validation/invoiceSchemas.js";
-
-const DEFAULT_PROFILE_KEY = "default";
 
 type PresetShape = typeof defaultPreset;
 
 type BusinessProfileShape = {
   _id?: unknown;
+  organizationId?: unknown;
   profileKey?: string;
   businessName?: string;
   tagline?: string;
   gstin?: string;
-  address?: {
-    line1?: string;
-    line2?: string;
-  };
+  address?: { line1?: string; line2?: string };
   contact?: {
     phone?: string;
     fax?: string;
@@ -36,12 +33,18 @@ type BusinessProfileShape = {
   isActive?: boolean;
 };
 
+function profileKey(organizationId: string) {
+  return `organization-${organizationId}`;
+}
+
 function presetToProfile(
+  organizationId: string,
   preset: PresetShape | PresetPayload,
   logoDataUrl = "",
 ) {
   return {
-    profileKey: DEFAULT_PROFILE_KEY,
+    organizationId,
+    profileKey: profileKey(organizationId),
     businessName: preset.business_name,
     tagline: preset.tagline || "",
     gstin: preset.gstin || "",
@@ -95,7 +98,10 @@ function profileToBusinessSnapshot(profile: BusinessProfileShape) {
   const preset = profileToPreset(profile);
   return {
     profileId: profile._id ? String(profile._id) : "",
-    profileKey: profile.profileKey || DEFAULT_PROFILE_KEY,
+    organizationId: profile.organizationId
+      ? String(profile.organizationId)
+      : "",
+    profileKey: profile.profileKey || "",
     businessName: preset.business_name,
     tagline: preset.tagline || "",
     gstin: preset.gstin || "",
@@ -121,62 +127,60 @@ function profileToBusinessSnapshot(profile: BusinessProfileShape) {
   };
 }
 
-async function getLegacySettings() {
-  const [presetRow, logoRow] = await Promise.all([
-    SettingModel.findOne({ key: "preset" }).lean(),
-    SettingModel.findOne({ key: "logo" }).lean(),
-  ]);
-
-  return {
-    preset: {
-      ...defaultPreset,
-      ...(presetRow?.value as Partial<PresetShape> | undefined),
+async function getOrCreateBusinessProfile(organizationId: string) {
+  const profile = await BusinessProfileModel.findOneAndUpdate(
+    { organizationId },
+    {
+      $setOnInsert: presetToProfile(organizationId, defaultPreset),
     },
-    logoDataUrl: typeof logoRow?.value === "string" ? logoRow.value : "",
-  };
-}
-
-async function getOrCreateActiveBusinessProfile() {
-  const existing = await BusinessProfileModel.findOne({
-    profileKey: DEFAULT_PROFILE_KEY,
-  }).lean();
-  if (existing) {
-    return existing;
-  }
-
-  const legacy = await getLegacySettings();
-  const created = await BusinessProfileModel.findOneAndUpdate(
-    { profileKey: DEFAULT_PROFILE_KEY },
-    { $setOnInsert: presetToProfile(legacy.preset, legacy.logoDataUrl) },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   ).lean();
 
-  if (!created) {
+  if (!profile) {
     throw new Error("Could not initialize business profile");
   }
 
-  return created;
+  return profile;
 }
 
-export async function getPreset() {
-  return profileToPreset(await getOrCreateActiveBusinessProfile());
+export async function createInitialBusinessProfile(
+  organizationId: string,
+  organizationName: string,
+  ownerEmail: string,
+  session?: ClientSession,
+) {
+  const preset = {
+    ...defaultPreset,
+    business_name: organizationName,
+    email: ownerEmail,
+    invoice_prefix: "INV",
+  };
+  await BusinessProfileModel.findOneAndUpdate(
+    { organizationId },
+    { $setOnInsert: presetToProfile(organizationId, preset) },
+    { upsert: true, new: true, setDefaultsOnInsert: true, session },
+  );
 }
 
-export async function getLogoDataUrl() {
-  const profile = await getOrCreateActiveBusinessProfile();
+export async function getPreset(organizationId: string) {
+  return profileToPreset(await getOrCreateBusinessProfile(organizationId));
+}
+
+export async function getLogoDataUrl(organizationId: string) {
+  const profile = await getOrCreateBusinessProfile(organizationId);
   return profile.logoDataUrl || null;
 }
 
-export async function getSettings() {
-  const profile = await getOrCreateActiveBusinessProfile();
+export async function getSettings(organizationId: string) {
+  const profile = await getOrCreateBusinessProfile(organizationId);
   return {
     preset: profileToPreset(profile),
     logoDataUrl: profile.logoDataUrl || null,
   };
 }
 
-export async function getBusinessProfileSnapshot() {
-  const profile = await getOrCreateActiveBusinessProfile();
+export async function getBusinessProfileSnapshot(organizationId: string) {
+  const profile = await getOrCreateBusinessProfile(organizationId);
   return {
     businessProfileId: profile._id,
     presetSnapshot: profileToPreset(profile),
@@ -184,35 +188,47 @@ export async function getBusinessProfileSnapshot() {
   };
 }
 
-export async function savePreset(preset: PresetPayload) {
-  const current = await getOrCreateActiveBusinessProfile();
+export async function savePreset(
+  organizationId: string,
+  preset: PresetPayload,
+) {
+  const current = await getOrCreateBusinessProfile(organizationId);
   const profile = await BusinessProfileModel.findOneAndUpdate(
-    { profileKey: DEFAULT_PROFILE_KEY },
-    { $set: presetToProfile(preset, current.logoDataUrl || "") },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { organizationId },
+    {
+      $set: presetToProfile(organizationId, preset, current.logoDataUrl || ""),
+    },
+    { new: true, runValidators: true },
   ).lean();
 
   if (!profile) {
     throw new Error("Could not save business profile");
   }
 
+  await OrganizationModel.updateOne(
+    { _id: organizationId },
+    {
+      $set: {
+        name: preset.business_name,
+        onboardingComplete: true,
+      },
+    },
+  );
   return profileToPreset(profile);
 }
 
-export async function saveLogo(dataUrl: string) {
-  await getOrCreateActiveBusinessProfile();
-  await BusinessProfileModel.findOneAndUpdate(
-    { profileKey: DEFAULT_PROFILE_KEY },
+export async function saveLogo(organizationId: string, dataUrl: string) {
+  await getOrCreateBusinessProfile(organizationId);
+  await BusinessProfileModel.updateOne(
+    { organizationId },
     { $set: { logoDataUrl: dataUrl } },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
   );
   return dataUrl;
 }
 
-export async function removeLogo() {
-  await BusinessProfileModel.findOneAndUpdate(
-    { profileKey: DEFAULT_PROFILE_KEY },
+export async function removeLogo(organizationId: string) {
+  await BusinessProfileModel.updateOne(
+    { organizationId },
     { $set: { logoDataUrl: "" } },
   );
-  await SettingModel.deleteOne({ key: "logo" });
 }

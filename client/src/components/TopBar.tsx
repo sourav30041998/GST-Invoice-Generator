@@ -24,8 +24,8 @@ const viewMeta: Record<ViewName, { title: string; sub: string }> = {
     sub: "Browse, filter, update, cancel, and re-download past invoices",
   },
   settings: {
-    title: "Load Preset JSON",
-    sub: "Configure business details, logo, and database tools",
+    title: "Company Profile",
+    sub: "Manage the business details used by this company’s invoices",
   },
   about: {
     title: "About & Help",
@@ -79,7 +79,15 @@ export function TopBar({
         {authStatus?.authRequired && authStatus.authenticated ? (
           <>
             <span className="security-badge">Secure Session</span>
-            <button className="icon-button" type="button" onClick={onLogout} title="Sign out">
+            <span className="organization-badge">
+              {authStatus.organization?.name || presetName}
+            </span>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={onLogout}
+              title="Sign out"
+            >
               <LogOut size={16} />
             </button>
           </>

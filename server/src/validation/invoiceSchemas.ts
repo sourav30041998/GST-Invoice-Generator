@@ -123,7 +123,9 @@ export const invoicePayloadSchema = z
     partyState: shortText(120).min(1, "State is required"),
     groupName: optionalText(160),
     roomNo: shortText(80).min(1, "Room no. is required"),
-    workflowStatus: invoiceWorkflowStatusSchema.optional().default("checkedOut"),
+    workflowStatus: invoiceWorkflowStatusSchema
+      .optional()
+      .default("checkedOut"),
     lineItems: z.array(lineItemSchema).min(1).max(100),
     adjustments: z.array(adjustmentSchema).max(50).optional().default([]),
   })

@@ -15,5 +15,5 @@ export const defaultPreset = {
   bank_account: "123456789012",
   bank_ifsc: "TEST0001234",
   terms:
-    "This is a sample preset for testing. Replace these details with your business information before issuing an invoice."
+    "This is a sample preset for testing. Replace these details with your business information before issuing an invoice.",
 };

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RefreshCw, ShieldAlert } from "lucide-react";
 import { api } from "./api";
 import { AboutView } from "./components/AboutView";
 import { HistoryView } from "./components/HistoryView";
 import { InvoiceForm } from "./components/InvoiceForm";
+import { InvitationAcceptanceView } from "./components/InvitationAcceptanceView";
 import { LoginView } from "./components/LoginView";
 import { NewInvoiceStart } from "./components/NewInvoiceStart";
 import { SettingsView } from "./components/SettingsView";
@@ -34,11 +36,15 @@ function invoiceWorkflowStatus(invoice: Invoice): InvoiceWorkflowStatus {
 }
 
 export default function App() {
+  const invitationToken = new URLSearchParams(
+    window.location.hash.replace(/^#/, ""),
+  ).get("invite");
   const [activeView, setActiveView] = useState<ViewName>("create");
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [dbReady, setDbReady] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
+  const [authRetryKey, setAuthRetryKey] = useState(0);
   const [nextInvoiceNo, setNextInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(todayIso());
   const [toast, setToast] = useState("");
@@ -80,6 +86,11 @@ export default function App() {
   );
 
   useEffect(() => {
+    if (invitationToken) {
+      setBootstrapped(true);
+      return;
+    }
+
     const bootstrap = async () => {
       try {
         const status = await api.authStatus();
@@ -101,13 +112,26 @@ export default function App() {
       }
     };
     void bootstrap();
-  }, [loadProtectedWorkspace, showToast]);
+  }, [
+    authRetryKey,
+    invitationToken,
+    loadProtectedWorkspace,
+    showToast,
+  ]);
 
-  const handleAuthenticated = async (status: AuthStatus) => {
+  const handleAuthenticated = async (
+    status: AuthStatus,
+    firstAccess = false,
+  ) => {
     setAuthStatus(status);
     try {
       await loadProtectedWorkspace();
-      showToast("Signed in securely.");
+      if (firstAccess) {
+        setActiveView("settings");
+        showToast("Workspace activated. Complete your business profile.");
+      } else {
+        showToast("Signed in securely.");
+      }
     } catch (error) {
       setDbReady(false);
       showToast(
@@ -125,7 +149,13 @@ export default function App() {
 
     setAuthStatus((current) =>
       current
-        ? { ...current, authenticated: false, csrfToken: null, user: null }
+        ? {
+            ...current,
+            authenticated: false,
+            csrfToken: null,
+            user: null,
+            organization: null,
+          }
         : null,
     );
     setSettings(defaultSettings);
@@ -269,24 +299,97 @@ export default function App() {
 
   const handleSettingsChange = (nextSettings: Settings) => {
     setSettings(nextSettings);
+    setAuthStatus((current) =>
+      current?.organization
+        ? {
+            ...current,
+            organization: {
+              ...current.organization,
+              name: nextSettings.preset.business_name,
+            },
+          }
+        : current,
+    );
     void refreshNextNumber(invoiceDate, nextSettings.preset.invoice_prefix);
   };
+
+  if (invitationToken) {
+    return (
+      <>
+        <InvitationAcceptanceView
+          token={invitationToken}
+          onAccepted={(status) => void handleAuthenticated(status, true)}
+          showToast={showToast}
+        />
+        <Toast message={toast} />
+      </>
+    );
+  }
 
   if (!bootstrapped) {
     return (
       <>
         <div className="auth-shell">
-          <div className="auth-panel auth-loading">Loading secure workspace...</div>
+          <div className="auth-panel auth-loading">
+            Loading secure workspace...
+          </div>
         </div>
         <Toast message={toast} />
       </>
     );
   }
 
-  if (authStatus?.authRequired && !authStatus.authenticated) {
+  if (!authStatus) {
     return (
       <>
-        <LoginView onAuthenticated={handleAuthenticated} showToast={showToast} />
+        <div className="auth-shell">
+          <div className="auth-layout">
+            <section className="auth-intro" aria-hidden="true">
+              <div className="auth-brand-mark">
+                <ShieldAlert size={22} />
+              </div>
+              <p className="auth-kicker">GST Invoice Workspace</p>
+              <h1>Your company data stays protected.</h1>
+              <div className="auth-trust-row">
+                <ShieldAlert size={17} />
+                <span>Private company workspace</span>
+              </div>
+            </section>
+            <section className="auth-panel auth-panel-wide auth-unavailable">
+              <div className="auth-icon">
+                <ShieldAlert size={22} />
+              </div>
+              <h2>Workspace unavailable</h2>
+              <p>
+                We could not verify a secure connection to the invoice service.
+                No company data has been loaded.
+              </p>
+              <button
+                className="btn btn-primary btn-large"
+                type="button"
+                onClick={() => {
+                  setBootstrapped(false);
+                  setAuthRetryKey((key) => key + 1);
+                }}
+              >
+                <span>Retry connection</span>
+                <RefreshCw size={16} />
+              </button>
+            </section>
+          </div>
+        </div>
+        <Toast message={toast} />
+      </>
+    );
+  }
+
+  if (authStatus.authRequired && !authStatus.authenticated) {
+    return (
+      <>
+        <LoginView
+          onAuthenticated={handleAuthenticated}
+          showToast={showToast}
+        />
         <Toast message={toast} />
       </>
     );
@@ -298,6 +401,9 @@ export default function App() {
         activeView={activeView}
         onViewChange={handleViewChange}
         dbReady={dbReady}
+        organizationName={
+          authStatus?.organization?.name || settings.preset.business_name
+        }
       />
       <main className="main-shell">
         <TopBar

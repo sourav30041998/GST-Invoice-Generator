@@ -19,13 +19,17 @@ const API_BASE =
     : "/api";
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-let csrfToken: string | null = null;
+let companyCsrfToken: string | null = null;
 
-function setCsrfToken(token: string | null | undefined) {
-  csrfToken = token || null;
+function setCompanyCsrfToken(token: string | null | undefined) {
+  companyCsrfToken = token || null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  csrfToken?: string | null,
+): Promise<T> {
   const method = (init?.method || "GET").toUpperCase();
   const headers = new Headers(init?.headers);
 
@@ -71,35 +75,46 @@ function queryString(filters: Record<string, string | undefined>) {
 export const api = {
   async authStatus() {
     const status = await request<AuthStatus>("/auth/me");
-    setCsrfToken(status.csrfToken);
+    setCompanyCsrfToken(status.csrfToken);
     return status;
   },
-  async login(username: string, password: string) {
+  async login(email: string, password: string) {
     const status = await request<AuthStatus>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
     });
-    setCsrfToken(status.csrfToken);
+    setCompanyCsrfToken(status.csrfToken);
+    return status;
+  },
+  async acceptInvitation(token: string, password: string) {
+    const status = await request<AuthStatus>("/invitations/accept", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    });
+    setCompanyCsrfToken(status.csrfToken);
     return status;
   },
   async logout() {
-    await request<void>("/auth/logout", { method: "POST" });
-    setCsrfToken(null);
+    await request<void>("/auth/logout", { method: "POST" }, companyCsrfToken);
+    setCompanyCsrfToken(null);
   },
   getSettings: () => request<Settings>("/settings"),
   updatePreset: (preset: Preset) =>
-    request<{ preset: Preset }>("/settings/preset", {
-      method: "PUT",
-      body: JSON.stringify(preset),
-    }),
+    request<{ preset: Preset }>(
+      "/settings/preset",
+      { method: "PUT", body: JSON.stringify(preset) },
+      companyCsrfToken,
+    ),
   updateLogo: (dataUrl: string) =>
-    request<{ logoDataUrl: string }>("/settings/logo", {
-      method: "PUT",
-      body: JSON.stringify({ dataUrl }),
-    }),
-  deleteLogo: () => request<void>("/settings/logo", { method: "DELETE" }),
+    request<{ logoDataUrl: string }>(
+      "/settings/logo",
+      { method: "PUT", body: JSON.stringify({ dataUrl }) },
+      companyCsrfToken,
+    ),
+  deleteLogo: () =>
+    request<void>("/settings/logo", { method: "DELETE" }, companyCsrfToken),
   clearDatabase: () =>
-    request<void>("/settings/database", { method: "DELETE" }),
+    request<void>("/settings/database", { method: "DELETE" }, companyCsrfToken),
   nextInvoiceNumber: (prefix: string, invoiceDate: string) =>
     request<{ invNo: string }>(
       `/invoices/next-number?${new URLSearchParams({ prefix, invoiceDate })}`,
@@ -116,36 +131,41 @@ export const api = {
   getInvoiceDraft: (draftId: string) =>
     request<InvoiceDraft>(`/invoices/drafts/${encodeURIComponent(draftId)}`),
   createInvoiceDraft: (payload: InvoicePayload) =>
-    request<InvoiceDraft>("/invoices/drafts", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    request<InvoiceDraft>(
+      "/invoices/drafts",
+      { method: "POST", body: JSON.stringify(payload) },
+      companyCsrfToken,
+    ),
   updateInvoiceDraft: (draftId: string, payload: InvoicePayload) =>
     request<InvoiceDraft | Invoice>(
       `/invoices/drafts/${encodeURIComponent(draftId)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      },
+      { method: "PUT", body: JSON.stringify(payload) },
+      companyCsrfToken,
     ),
   deleteInvoiceDraft: (draftId: string) =>
-    request<void>(`/invoices/drafts/${encodeURIComponent(draftId)}`, {
-      method: "DELETE",
-    }),
+    request<void>(
+      `/invoices/drafts/${encodeURIComponent(draftId)}`,
+      { method: "DELETE" },
+      companyCsrfToken,
+    ),
   createInvoice: (payload: InvoicePayload) =>
-    request<Invoice>("/invoices", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    request<Invoice>(
+      "/invoices",
+      { method: "POST", body: JSON.stringify(payload) },
+      companyCsrfToken,
+    ),
   updateInvoice: (invNo: string, payload: InvoicePayload) =>
-    request<Invoice>(`/invoices/${encodeURIComponent(invNo)}`, {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    }),
+    request<Invoice>(
+      `/invoices/${encodeURIComponent(invNo)}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+      companyCsrfToken,
+    ),
   cancelInvoice: (invNo: string) =>
-    request<Invoice>(`/invoices/${encodeURIComponent(invNo)}/cancel`, {
-      method: "PATCH",
-    }),
+    request<Invoice>(
+      `/invoices/${encodeURIComponent(invNo)}/cancel`,
+      { method: "PATCH" },
+      companyCsrfToken,
+    ),
   exportCsvUrl: (filters: InvoiceFilters) =>
     `${API_BASE}/invoices/export.csv${queryString(filters)}`,
   async downloadCsv(filters: InvoiceFilters) {
@@ -157,7 +177,9 @@ export const api = {
       const body = (await response.json().catch(() => null)) as {
         message?: string;
       } | null;
-      throw new Error(body?.message || `Request failed with ${response.status}`);
+      throw new Error(
+        body?.message || `Request failed with ${response.status}`,
+      );
     }
 
     const blob = await response.blob();

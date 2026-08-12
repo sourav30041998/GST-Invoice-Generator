@@ -2,6 +2,13 @@ import { Schema, model } from "mongoose";
 
 const counterSchema = new Schema(
   {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      immutable: true,
+      index: true,
+    },
     scope: { type: String, required: true, unique: true, trim: true },
     prefix: { type: String, required: true, trim: true, uppercase: true },
     period: { type: String, required: true, trim: true },
@@ -11,7 +18,7 @@ const counterSchema = new Schema(
 );
 
 counterSchema.index(
-  { prefix: 1, period: 1 },
+  { organizationId: 1, prefix: 1, period: 1 },
   {
     unique: true,
     partialFilterExpression: {
