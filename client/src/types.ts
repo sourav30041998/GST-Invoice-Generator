@@ -17,8 +17,20 @@ export type Preset = {
   terms?: string;
 };
 
+export type TaxPreset = {
+  key: string;
+  label: string;
+  hsn: string;
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
+  allowInclusive: boolean;
+  note: string;
+};
+
 export type Settings = {
   preset: Preset;
+  taxPresets: TaxPreset[];
   logoDataUrl: string | null;
 };
 
@@ -45,7 +57,7 @@ export type AuthStatus = {
 };
 
 export type InvoiceWorkflowStatus =
-  "draft" | "checkedIn" | "checkedOut" | "cancelled";
+  "draft" | "reserved" | "checkedIn" | "checkedOut" | "cancelled";
 export type InvoiceWorkbenchStatus = "all" | InvoiceWorkflowStatus;
 export type CreatableInvoiceWorkflowStatus = Exclude<
   InvoiceWorkflowStatus,
@@ -99,6 +111,66 @@ export type Adjustment = Omit<AdjustmentInput, "id" | "amount"> & {
   amount: number;
 };
 
+export type Room = {
+  _id: string;
+  roomNumber: string;
+  roomType: string;
+  floor: string;
+  wing: string;
+  capacity: number;
+  isActive: boolean;
+  version: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type RoomInput = {
+  roomNumber: string;
+  roomType: string;
+  floor: string;
+  wing: string;
+  capacity: number;
+};
+
+export type RoomSelection = {
+  roomId: string;
+};
+
+export type InvoiceRoom = RoomSelection & {
+  roomNumber: string;
+  roomType: string;
+};
+
+export type RoomAllocation = {
+  _id: string;
+  roomId?: string;
+  invoiceNumber: string;
+  roomNumberSnapshot: string;
+  checkinDate: string;
+  checkoutDate: string;
+  status: Exclude<InvoiceWorkflowStatus, "draft">;
+  createdAt?: string;
+};
+
+export type RoomAllocationHistory = {
+  items: RoomAllocation[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+    hasPreviousPage: boolean;
+    hasNextPage: boolean;
+  };
+};
+
+export type RoomBookingBoard = {
+  from: string;
+  to: string;
+  rooms: Room[];
+  allocations: RoomAllocation[];
+};
+
 export type InvoicePayload = {
   invDate: string;
   checkinDate: string;
@@ -109,7 +181,7 @@ export type InvoicePayload = {
   partyAddress: string;
   partyState: string;
   groupName: string;
-  roomNo: string;
+  rooms: RoomSelection[];
   workflowStatus: CreatableInvoiceWorkflowStatus;
   lineItems: Omit<LineItemInput, "id">[];
   adjustments: Omit<AdjustmentInput, "id">[];
@@ -117,8 +189,10 @@ export type InvoicePayload = {
 
 type InvoiceRecordBase = Omit<
   InvoicePayload,
-  "lineItems" | "adjustments" | "workflowStatus"
+  "lineItems" | "adjustments" | "workflowStatus" | "rooms"
 > & {
+  roomNo: string;
+  rooms: InvoiceRoom[];
   _id?: string;
   lineItems: CalculatedLineItem[];
   adjustments: Adjustment[];

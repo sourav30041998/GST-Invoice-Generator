@@ -1,4 +1,4 @@
-import type { LineItemInput, Preset } from "./types";
+import type { LineItemInput, Preset, TaxPreset } from "./types";
 
 export const defaultPreset: Preset = {
   business_name: "Sample Stay Hotel",
@@ -20,7 +20,7 @@ export const defaultPreset: Preset = {
     "This is a sample preset for testing. Replace these details with your business information before issuing an invoice.",
 };
 
-export const taxPresets = [
+export const defaultTaxPresets: TaxPreset[] = [
   {
     key: "Rooms <= Rs.7500/day",
     label: "Rooms - 12%",
@@ -71,28 +71,34 @@ export const taxPresets = [
     allowInclusive: false,
     note: "Specified premises or higher hotel accommodation premises",
   },
-  {
-    key: "Custom",
-    label: "Custom",
-    hsn: "",
-    cgstRate: 0,
-    sgstRate: 0,
-    igstRate: 0,
-    allowInclusive: true,
-    note: "Manual rates",
-  },
 ];
+
+export const invoiceCustomTaxPreset: TaxPreset = {
+  key: "Custom",
+  label: "Custom",
+  hsn: "",
+  cgstRate: 0,
+  sgstRate: 0,
+  igstRate: 0,
+  allowInclusive: true,
+  note: "",
+};
 
 export const emptyLineItem = (
   presetKey = "Rooms <= Rs.7500/day",
   date = "",
+  taxPresets = defaultTaxPresets,
 ): LineItemInput => {
   const preset =
-    taxPresets.find((item) => item.key === presetKey) || taxPresets[0];
+    (presetKey === invoiceCustomTaxPreset.key
+      ? invoiceCustomTaxPreset
+      : taxPresets.find((item) => item.key === presetKey)) ||
+    taxPresets[0] ||
+    invoiceCustomTaxPreset;
   return {
     id: crypto.randomUUID(),
     presetKey: preset.key,
-    description: "",
+    description: preset.note,
     hsn: preset.hsn,
     date,
     units: 1,

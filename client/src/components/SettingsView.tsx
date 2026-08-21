@@ -1,17 +1,21 @@
 import type { ChangeEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BadgePercent,
   Building2,
   Download,
   ImagePlus,
   Landmark,
+  LoaderCircle,
+  Plus,
   Save,
   Trash2,
   UploadCloud,
+  X,
 } from "lucide-react";
 import { api } from "../api";
 import { defaultPreset } from "../constants";
-import type { Preset, Settings } from "../types";
+import type { Preset, Settings, TaxPreset } from "../types";
 
 type SettingsViewProps = {
   settings: Settings;
@@ -64,6 +68,64 @@ function initials(name: string) {
   );
 }
 
+function validateTaxPresets(taxPresets: TaxPreset[]) {
+  if (taxPresets.length === 0) {
+    return "Add at least one reusable GST preset.";
+  }
+
+  if (taxPresets.length > 20) {
+    return "A maximum of 20 GST presets is allowed.";
+  }
+
+  for (const preset of taxPresets) {
+    if (!preset.label.trim()) {
+      return "Every GST preset needs a name.";
+    }
+
+    if (
+      preset.key.trim().toLowerCase() === "custom" ||
+      preset.label.trim().toLowerCase() === "custom"
+    ) {
+      return "Custom is reserved for invoice-only entries.";
+    }
+
+    if (!/^[A-Z0-9/-]*$/i.test(preset.hsn.trim())) {
+      return `${preset.label}: HSN/SAC contains unsupported characters.`;
+    }
+
+    const rates = [preset.cgstRate, preset.sgstRate, preset.igstRate];
+    if (
+      rates.some((rate) => !Number.isFinite(rate) || rate < 0 || rate > 100)
+    ) {
+      return `${preset.label}: tax rates must be between 0% and 100%.`;
+    }
+    if (
+      (preset.cgstRate > 0 || preset.sgstRate > 0) &&
+      preset.cgstRate !== preset.sgstRate
+    ) {
+      return `${preset.label}: CGST and SGST must be equal.`;
+    }
+    if (preset.igstRate > 0 && (preset.cgstRate > 0 || preset.sgstRate > 0)) {
+      return `${preset.label}: use either CGST/SGST or IGST.`;
+    }
+  }
+
+  return "";
+}
+
+function createTaxPreset(): TaxPreset {
+  return {
+    key: `preset-${crypto.randomUUID()}`,
+    label: "",
+    hsn: "",
+    cgstRate: 0,
+    sgstRate: 0,
+    igstRate: 0,
+    allowInclusive: true,
+    note: "",
+  };
+}
+
 export function SettingsView({
   settings,
   onSettingsChange,
@@ -71,7 +133,18 @@ export function SettingsView({
   showToast,
 }: SettingsViewProps) {
   const [form, setForm] = useState<Preset>(settings.preset);
+  const [taxPresetForm, setTaxPresetForm] = useState<TaxPreset[]>(
+    settings.taxPresets,
+  );
   const [saving, setSaving] = useState(false);
+  const [savingTaxPresets, setSavingTaxPresets] = useState(false);
+  const [newTaxPreset, setNewTaxPreset] = useState<TaxPreset | null>(null);
+  const [newTaxPresetError, setNewTaxPresetError] = useState("");
+  const [savingNewTaxPreset, setSavingNewTaxPreset] = useState(false);
+  const addTaxPresetButtonRef = useRef<HTMLButtonElement>(null);
+  const taxPresetDialogRef = useRef<HTMLElement>(null);
+  const taxPresetNameInputRef = useRef<HTMLInputElement>(null);
+  const newTaxPresetOpen = newTaxPreset !== null;
   const logoInitials = useMemo(
     () => initials(form.business_name),
     [form.business_name],
@@ -81,8 +154,142 @@ export function SettingsView({
     setForm(settings.preset);
   }, [settings.preset]);
 
+  useEffect(() => {
+    setTaxPresetForm(settings.taxPresets.map((preset) => ({ ...preset })));
+  }, [settings.taxPresets]);
+
+  useEffect(() => {
+    if (!newTaxPresetOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const focusableSelector =
+      "button:not([disabled]), input:not([disabled]), textarea:not([disabled])";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !savingNewTaxPreset) {
+        setNewTaxPreset(null);
+        setNewTaxPresetError("");
+        window.setTimeout(() => addTaxPresetButtonRef.current?.focus(), 0);
+        return;
+      }
+
+      if (event.key !== "Tab" || !taxPresetDialogRef.current) return;
+      const focusable = Array.from(
+        taxPresetDialogRef.current.querySelectorAll<HTMLElement>(
+          focusableSelector,
+        ),
+      );
+      if (!focusable.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    const focusTimer = window.setTimeout(
+      () => taxPresetNameInputRef.current?.focus(),
+      0,
+    );
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [newTaxPresetOpen, savingNewTaxPreset]);
+
+  const taxPresetsChanged = useMemo(
+    () => JSON.stringify(taxPresetForm) !== JSON.stringify(settings.taxPresets),
+    [settings.taxPresets, taxPresetForm],
+  );
+
   const updateField = (field: keyof Preset, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateTaxPreset = (
+    key: string,
+    field: Exclude<keyof TaxPreset, "key">,
+    value: string | number | boolean,
+  ) => {
+    setTaxPresetForm((current) =>
+      current.map((preset) =>
+        preset.key === key
+          ? ({ ...preset, [field]: value } as TaxPreset)
+          : preset,
+      ),
+    );
+  };
+
+  const openTaxPresetModal = () => {
+    if (taxPresetForm.length >= 20) {
+      showToast("A maximum of 20 GST presets is allowed.");
+      return;
+    }
+    setNewTaxPresetError("");
+    setNewTaxPreset(createTaxPreset());
+  };
+
+  const closeTaxPresetModal = () => {
+    if (savingNewTaxPreset) return;
+    setNewTaxPreset(null);
+    setNewTaxPresetError("");
+    window.setTimeout(() => addTaxPresetButtonRef.current?.focus(), 0);
+  };
+
+  const updateNewTaxPreset = (
+    field: Exclude<keyof TaxPreset, "key">,
+    value: string | number | boolean,
+  ) => {
+    setNewTaxPreset((current) =>
+      current ? ({ ...current, [field]: value } as TaxPreset) : current,
+    );
+    setNewTaxPresetError("");
+  };
+
+  const saveNewTaxPreset = async () => {
+    if (!newTaxPreset) return;
+
+    const nextTaxPresets = [...taxPresetForm, newTaxPreset];
+    const validationMessage = validateTaxPresets(nextTaxPresets);
+    if (validationMessage) {
+      setNewTaxPresetError(validationMessage);
+      return;
+    }
+
+    setSavingNewTaxPreset(true);
+    setNewTaxPresetError("");
+    try {
+      const { taxPresets } = await api.updateTaxPresets(nextTaxPresets);
+      setTaxPresetForm(taxPresets);
+      onSettingsChange({ ...settings, taxPresets });
+      setNewTaxPreset(null);
+      showToast("GST preset added.");
+      window.setTimeout(() => addTaxPresetButtonRef.current?.focus(), 0);
+    } catch (error) {
+      setNewTaxPresetError(
+        error instanceof Error ? error.message : "Could not add GST preset.",
+      );
+    } finally {
+      setSavingNewTaxPreset(false);
+    }
+  };
+
+  const removeTaxPreset = (key: string) => {
+    if (taxPresetForm.length <= 1) {
+      showToast("Keep at least one reusable GST preset.");
+      return;
+    }
+    setTaxPresetForm((current) =>
+      current.filter((preset) => preset.key !== key),
+    );
   };
 
   const saveProfile = async () => {
@@ -99,6 +306,30 @@ export function SettingsView({
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveTaxPresetPreferences = async () => {
+    const validationMessage = validateTaxPresets(taxPresetForm);
+    if (validationMessage) {
+      showToast(validationMessage);
+      return;
+    }
+
+    setSavingTaxPresets(true);
+    try {
+      const { taxPresets } = await api.updateTaxPresets(taxPresetForm);
+      setTaxPresetForm(taxPresets);
+      onSettingsChange({ ...settings, taxPresets });
+      showToast("GST preset preferences saved.");
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Could not save GST preset preferences.",
+      );
+    } finally {
+      setSavingTaxPresets(false);
     }
   };
 
@@ -385,6 +616,167 @@ export function SettingsView({
         </div>
       </section>
 
+      <section className="panel gst-preset-panel">
+        <div className="panel-title gst-preset-title">
+          <span className="panel-title-label">
+            <BadgePercent size={16} />
+            <span>GST Preset Preferences</span>
+          </span>
+          <div className="gst-preset-title-actions">
+            <span
+              className={`settings-save-state${taxPresetsChanged ? " unsaved" : ""}`}
+            >
+              {taxPresetsChanged ? "Unsaved changes" : "Saved"}
+            </span>
+            <button
+              className="btn btn-outline gst-preset-add"
+              type="button"
+              ref={addTaxPresetButtonRef}
+              onClick={openTaxPresetModal}
+              disabled={savingTaxPresets || taxPresetForm.length >= 20}
+            >
+              <Plus size={15} />
+              Add Preset
+            </button>
+          </div>
+        </div>
+
+        <div
+          className="gst-preset-editor"
+          role="table"
+          aria-label="GST presets"
+        >
+          <div className="gst-preset-editor-head" role="row">
+            <span role="columnheader">Preset</span>
+            <span role="columnheader">HSN/SAC</span>
+            <span role="columnheader">CGST%</span>
+            <span role="columnheader">SGST%</span>
+            <span role="columnheader">IGST%</span>
+            <span role="columnheader">Inclusive</span>
+            <span role="columnheader">Description</span>
+          </div>
+          {taxPresetForm.map((preset, index) => (
+            <div className="gst-preset-editor-row" role="row" key={preset.key}>
+              <div className="gst-preset-name-field" role="cell">
+                <span className="gst-preset-order">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <div>
+                  <input
+                    className="input gst-preset-input"
+                    aria-label={`${preset.key} preset name`}
+                    value={preset.label}
+                    maxLength={80}
+                    disabled={savingTaxPresets}
+                    onChange={(event) =>
+                      updateTaxPreset(preset.key, "label", event.target.value)
+                    }
+                  />
+                </div>
+                <button
+                  className="icon-button danger gst-preset-remove"
+                  type="button"
+                  title={`Remove ${preset.label}`}
+                  aria-label={`Remove ${preset.label}`}
+                  onClick={() => removeTaxPreset(preset.key)}
+                  disabled={savingTaxPresets || taxPresetForm.length <= 1}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <div role="cell" data-label="HSN/SAC">
+                <input
+                  className="input gst-preset-input gst-preset-code"
+                  aria-label={`${preset.label} HSN or SAC`}
+                  value={preset.hsn}
+                  maxLength={16}
+                  disabled={savingTaxPresets}
+                  onChange={(event) =>
+                    updateTaxPreset(
+                      preset.key,
+                      "hsn",
+                      event.target.value.toUpperCase(),
+                    )
+                  }
+                />
+              </div>
+              {(["cgstRate", "sgstRate", "igstRate"] as const).map((field) => (
+                <div
+                  role="cell"
+                  data-label={`${field.slice(0, -4).toUpperCase()}%`}
+                  key={field}
+                >
+                  <input
+                    className="input gst-preset-input gst-preset-rate"
+                    aria-label={`${preset.label} ${field}`}
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={preset[field]}
+                    disabled={savingTaxPresets}
+                    onChange={(event) =>
+                      updateTaxPreset(
+                        preset.key,
+                        field,
+                        event.target.value === ""
+                          ? 0
+                          : Number(event.target.value),
+                      )
+                    }
+                  />
+                </div>
+              ))}
+              <div role="cell" data-label="Inclusive">
+                <label className="gst-inclusive-control">
+                  <input
+                    type="checkbox"
+                    checked={preset.allowInclusive}
+                    disabled={savingTaxPresets}
+                    onChange={(event) =>
+                      updateTaxPreset(
+                        preset.key,
+                        "allowInclusive",
+                        event.target.checked,
+                      )
+                    }
+                  />
+                  <span aria-hidden="true" />
+                  <strong>{preset.allowInclusive ? "Allowed" : "Off"}</strong>
+                </label>
+              </div>
+              <div role="cell" data-label="Description">
+                <textarea
+                  className="input gst-preset-input gst-preset-description"
+                  aria-label={`${preset.label} description`}
+                  value={preset.note}
+                  maxLength={240}
+                  rows={2}
+                  placeholder="Where this preset applies"
+                  disabled={savingTaxPresets}
+                  onChange={(event) =>
+                    updateTaxPreset(preset.key, "note", event.target.value)
+                  }
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="button-row profile-save-row gst-preset-save-row">
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => void saveTaxPresetPreferences()}
+            disabled={savingTaxPresets || !taxPresetsChanged}
+          >
+            <Save size={16} />
+            {savingTaxPresets ? "Saving..." : "Save GST Presets"}
+          </button>
+        </div>
+      </section>
+
       <section className="settings-grid">
         <div className="panel compact-panel">
           <div className="panel-title">
@@ -478,6 +870,184 @@ export function SettingsView({
           </button>
         </div>
       </section>
+
+      {newTaxPreset ? (
+        <div className="preset-modal-backdrop" role="presentation">
+          <section
+            className="preset-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-tax-preset-title"
+            ref={taxPresetDialogRef}
+          >
+            <header className="preset-modal-header">
+              <div className="preset-modal-heading">
+                <span className="preset-modal-icon">
+                  <BadgePercent size={19} />
+                </span>
+                <div>
+                  <span className="preset-modal-kicker">GST preference</span>
+                  <h3 id="add-tax-preset-title">Add new preset</h3>
+                </div>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={closeTaxPresetModal}
+                title="Close preset form"
+                aria-label="Close preset form"
+                disabled={savingNewTaxPreset}
+              >
+                <X size={16} />
+              </button>
+            </header>
+
+            <form
+              className="preset-modal-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveNewTaxPreset();
+              }}
+            >
+              <div className="preset-modal-grid">
+                <label className="field preset-modal-name">
+                  <span>
+                    Preset name <span className="required-star">*</span>
+                  </span>
+                  <input
+                    className="input"
+                    ref={taxPresetNameInputRef}
+                    value={newTaxPreset.label}
+                    maxLength={80}
+                    placeholder="Rooms - 12%"
+                    disabled={savingNewTaxPreset}
+                    onChange={(event) =>
+                      updateNewTaxPreset("label", event.target.value)
+                    }
+                    required
+                  />
+                </label>
+
+                <label className="field">
+                  <span>HSN/SAC</span>
+                  <input
+                    className="input"
+                    value={newTaxPreset.hsn}
+                    maxLength={16}
+                    placeholder="996311"
+                    disabled={savingNewTaxPreset}
+                    onChange={(event) =>
+                      updateNewTaxPreset(
+                        "hsn",
+                        event.target.value.toUpperCase(),
+                      )
+                    }
+                  />
+                </label>
+
+                {(["cgstRate", "sgstRate", "igstRate"] as const).map(
+                  (field) => (
+                    <label className="field" key={field}>
+                      <span>{field.slice(0, -4).toUpperCase()}%</span>
+                      <input
+                        className="input preset-modal-rate"
+                        aria-label={`New preset ${field}`}
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={newTaxPreset[field]}
+                        disabled={savingNewTaxPreset}
+                        onChange={(event) =>
+                          updateNewTaxPreset(
+                            field,
+                            event.target.value === ""
+                              ? 0
+                              : Number(event.target.value),
+                          )
+                        }
+                      />
+                    </label>
+                  ),
+                )}
+
+                <div className="field preset-modal-inclusive">
+                  <span>GST-inclusive rate</span>
+                  <label className="gst-inclusive-control">
+                    <input
+                      type="checkbox"
+                      checked={newTaxPreset.allowInclusive}
+                      disabled={savingNewTaxPreset}
+                      onChange={(event) =>
+                        updateNewTaxPreset(
+                          "allowInclusive",
+                          event.target.checked,
+                        )
+                      }
+                    />
+                    <span aria-hidden="true" />
+                    <strong>
+                      {newTaxPreset.allowInclusive ? "Allowed" : "Off"}
+                    </strong>
+                  </label>
+                </div>
+
+                <label className="field preset-modal-description">
+                  <span>Description</span>
+                  <textarea
+                    className="input"
+                    value={newTaxPreset.note}
+                    maxLength={240}
+                    rows={3}
+                    placeholder="Where this preset applies"
+                    disabled={savingNewTaxPreset}
+                    onChange={(event) =>
+                      updateNewTaxPreset("note", event.target.value)
+                    }
+                  />
+                </label>
+              </div>
+
+              {newTaxPresetError ? (
+                <div className="preset-modal-error" role="alert">
+                  {newTaxPresetError}
+                </div>
+              ) : null}
+
+              <footer className="preset-modal-actions">
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={closeTaxPresetModal}
+                  disabled={savingNewTaxPreset}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  disabled={savingNewTaxPreset || !newTaxPreset.label.trim()}
+                >
+                  {savingNewTaxPreset ? (
+                    <LoaderCircle className="preset-modal-spinner" size={16} />
+                  ) : (
+                    <Save size={16} />
+                  )}
+                  {savingNewTaxPreset ? "Saving..." : "Save Preset"}
+                </button>
+              </footer>
+            </form>
+
+            {savingNewTaxPreset ? (
+              <div className="preset-modal-saving-overlay" aria-live="polite">
+                <LoaderCircle className="preset-modal-spinner" size={26} />
+                <strong>Saving preset</strong>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

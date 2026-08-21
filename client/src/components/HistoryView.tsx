@@ -84,7 +84,7 @@ export function HistoryView({
     try {
       const invoice = await api.getInvoice(invNo);
       const logoDataUrl = await resolveLogoDataUrl(settings.logoDataUrl);
-      buildInvoicePdf(invoice, logoDataUrl);
+      buildInvoicePdf(invoice, logoDataUrl, settings.taxPresets);
       showToast(`Re-downloading ${invNo}`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Download failed.");

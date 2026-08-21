@@ -7,11 +7,12 @@ import { InvoiceForm } from "./components/InvoiceForm";
 import { InvitationAcceptanceView } from "./components/InvitationAcceptanceView";
 import { LoginView } from "./components/LoginView";
 import { NewInvoiceStart } from "./components/NewInvoiceStart";
+import { RoomDirectoryView } from "./components/RoomDirectoryView";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar, type ViewName } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { Toast } from "./components/Toast";
-import { defaultPreset } from "./constants";
+import { defaultPreset, defaultTaxPresets } from "./constants";
 import type {
   AuthStatus,
   Invoice,
@@ -24,6 +25,7 @@ import { todayIso } from "./utils/dates";
 
 const defaultSettings: Settings = {
   preset: defaultPreset,
+  taxPresets: defaultTaxPresets,
   logoDataUrl: null,
 };
 
@@ -112,12 +114,7 @@ export default function App() {
       }
     };
     void bootstrap();
-  }, [
-    authRetryKey,
-    invitationToken,
-    loadProtectedWorkspace,
-    showToast,
-  ]);
+  }, [authRetryKey, invitationToken, loadProtectedWorkspace, showToast]);
 
   const handleAuthenticated = async (
     status: AuthStatus,
@@ -423,6 +420,7 @@ export default function App() {
           (invoiceFormOpen || editingInvoice || activeDraft) ? (
             <InvoiceForm
               nextInvoiceNo={nextInvoiceNo}
+              taxPresets={settings.taxPresets}
               editingInvoice={editingInvoice}
               activeDraft={activeDraft}
               onInvoiceDateChange={handleInvoiceDateChange}
@@ -453,6 +451,12 @@ export default function App() {
               showToast={showToast}
             />
           ) : null}
+          {activeView === "rooms" ? (
+            <RoomDirectoryView
+              showToast={showToast}
+              onOpenInvoice={handleOpenInvoice}
+            />
+          ) : null}
           {activeView === "settings" ? (
             <SettingsView
               settings={settings}
@@ -471,7 +475,7 @@ export default function App() {
               showToast={showToast}
             />
           ) : null}
-          {activeView === "about" ? <AboutView settings={settings} /> : null}
+          {activeView === "about" ? <AboutView /> : null}
         </div>
       </main>
       <Toast message={toast} />

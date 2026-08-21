@@ -1,6 +1,6 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import type { Invoice } from "../types";
+import { jsPDF } from "jspdf";
+import { autoTable } from "jspdf-autotable";
+import type { CalculatedLineItem, Invoice, TaxPreset } from "../types";
 import { formatCurrency, numWords } from "./calculations";
 import { formatDate } from "./dates";
 
@@ -20,7 +20,26 @@ const imageFormat = (dataUrl: string) => {
 
 const textOrDash = (value?: string) => value?.trim() || "-";
 
-export function buildInvoicePdf(invoice: Invoice, logoDataUrl: string | null) {
+const invoiceLineDescription = (
+  item: CalculatedLineItem,
+  taxPresets: TaxPreset[],
+) => {
+  const savedDescription = item.description?.trim();
+  if (savedDescription || item.presetKey === "Custom") {
+    return savedDescription || "";
+  }
+
+  return (
+    taxPresets.find((preset) => preset.key === item.presetKey)?.note.trim() ||
+    ""
+  );
+};
+
+export function buildInvoicePdf(
+  invoice: Invoice,
+  logoDataUrl: string | null,
+  taxPresets: TaxPreset[] = [],
+) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = 210;
   const pageHeight = 297;
@@ -179,12 +198,7 @@ export function buildInvoicePdf(invoice: Invoice, logoDataUrl: string | null) {
 
       return [
         formatDate(item.date),
-        [
-          item.presetKey && item.presetKey !== "Custom" ? item.presetKey : "",
-          item.description,
-        ]
-          .filter(Boolean)
-          .join("\n"),
+        invoiceLineDescription(item, taxPresets),
         item.hsn,
         item.units.toFixed(2),
         item.rate.toFixed(2),
@@ -206,10 +220,14 @@ export function buildInvoicePdf(invoice: Invoice, logoDataUrl: string | null) {
       fontStyle: "bold",
     },
     columnStyles: {
-      3: { halign: "right" },
-      4: { halign: "right" },
-      5: { halign: "right" },
-      7: { halign: "right" },
+      0: { cellWidth: 18 },
+      1: { cellWidth: 46, overflow: "linebreak" },
+      2: { cellWidth: 16 },
+      3: { cellWidth: 12, halign: "right", overflow: "linebreak" },
+      4: { cellWidth: 20, halign: "right", overflow: "linebreak" },
+      5: { cellWidth: 20, halign: "right", overflow: "linebreak" },
+      6: { cellWidth: 28, overflow: "linebreak" },
+      7: { cellWidth: 22, halign: "right", overflow: "linebreak" },
     },
     margin: { left: marginLeft, right: marginRight },
     theme: "grid",

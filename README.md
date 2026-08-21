@@ -33,6 +33,7 @@ Backend runs on `http://localhost:5050`.
 - Browse invoice history, filter by date, GST status, status, or search term.
 - Re-download, edit, cancel, and export invoice records.
 - Upload business preset JSON and logo from the company profile view.
+- Maintain an organization-owned room directory, select one or more available rooms on an invoice, and retain room-allocation history.
 
 ## Company Isolation
 
@@ -42,6 +43,10 @@ Backend runs on `http://localhost:5050`.
 - The company profile and clear-data action affect only the signed-in organization.
 
 See [MULTI_TENANCY.md](./MULTI_TENANCY.md) for the data model, API list, migration procedure, and rollout checklist.
+
+## Room Inventory and Allocation
+
+Each organization owns its own room directory. Rooms are selected from server-verified availability rather than entered as free text, and a single invoice can carry multiple rooms. See [ROOM_INVENTORY.md](./ROOM_INVENTORY.md) for the database model, API contract, security controls, migration guidance, and operations checklist.
 
 ## Closed Access
 

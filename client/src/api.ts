@@ -9,7 +9,13 @@ import type {
   InvoiceWorkbenchResponse,
   InvoiceWorkbenchStatus,
   Preset,
+  Room,
+  RoomAllocation,
+  RoomAllocationHistory,
+  RoomBookingBoard,
+  RoomInput,
   Settings,
+  TaxPreset,
 } from "./types";
 
 const configuredApiUrl = import.meta.env.VITE_API_URL as string | undefined;
@@ -72,6 +78,49 @@ function queryString(filters: Record<string, string | undefined>) {
   return params.toString() ? `?${params.toString()}` : "";
 }
 
+function isRoomAllocationHistory(
+  value: RoomAllocationHistory | RoomAllocation[],
+): value is RoomAllocationHistory {
+  return !Array.isArray(value) && Array.isArray(value.items);
+}
+
+function normalizeLegacyRoomHistory(
+  allocations: RoomAllocation[],
+  requestedPage: number,
+): RoomAllocationHistory {
+  const pageSize = 10;
+  const historyStart = new Date();
+  historyStart.setUTCFullYear(historyStart.getUTCFullYear() - 1);
+  const historyStartTime = historyStart.getTime();
+  const items = allocations
+    .filter((allocation) => {
+      const historyDate = Date.parse(
+        allocation.createdAt || allocation.checkinDate,
+      );
+      return Number.isFinite(historyDate) && historyDate >= historyStartTime;
+    })
+    .sort(
+      (left, right) =>
+        Date.parse(right.createdAt || right.checkinDate) -
+        Date.parse(left.createdAt || left.checkinDate),
+    );
+  const totalItems = items.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const page = Math.min(Math.max(1, requestedPage), totalPages);
+
+  return {
+    items: items.slice((page - 1) * pageSize, page * pageSize),
+    pagination: {
+      page,
+      pageSize,
+      totalItems,
+      totalPages,
+      hasPreviousPage: page > 1,
+      hasNextPage: page < totalPages,
+    },
+  };
+}
+
 export const api = {
   async authStatus() {
     const status = await request<AuthStatus>("/auth/me");
@@ -105,6 +154,12 @@ export const api = {
       { method: "PUT", body: JSON.stringify(preset) },
       companyCsrfToken,
     ),
+  updateTaxPresets: (taxPresets: TaxPreset[]) =>
+    request<{ taxPresets: TaxPreset[] }>(
+      "/settings/tax-presets",
+      { method: "PUT", body: JSON.stringify({ taxPresets }) },
+      companyCsrfToken,
+    ),
   updateLogo: (dataUrl: string) =>
     request<{ logoDataUrl: string }>(
       "/settings/logo",
@@ -115,6 +170,57 @@ export const api = {
     request<void>("/settings/logo", { method: "DELETE" }, companyCsrfToken),
   clearDatabase: () =>
     request<void>("/settings/database", { method: "DELETE" }, companyCsrfToken),
+  listRooms: (status: "active" | "inactive" | "all" = "all", search = "") =>
+    request<Room[]>(`/rooms${queryString({ status, search })}`),
+  listAvailableRooms: (
+    checkinDate: string,
+    checkoutDate: string,
+    excludeInvoiceId?: string,
+  ) =>
+    request<Room[]>(
+      `/rooms/availability${queryString({
+        checkinDate,
+        checkoutDate,
+        excludeInvoiceId,
+      })}`,
+    ),
+  createRoom: (room: RoomInput) =>
+    request<Room>(
+      "/rooms",
+      { method: "POST", body: JSON.stringify(room) },
+      companyCsrfToken,
+    ),
+  updateRoom: (
+    roomId: string,
+    room: Partial<RoomInput> & { isActive?: boolean; version: number },
+  ) =>
+    request<Room>(
+      `/rooms/${encodeURIComponent(roomId)}`,
+      { method: "PATCH", body: JSON.stringify(room) },
+      companyCsrfToken,
+    ),
+  archiveRoom: (roomId: string) =>
+    request<void>(
+      `/rooms/${encodeURIComponent(roomId)}`,
+      { method: "DELETE" },
+      companyCsrfToken,
+    ),
+  async listRoomAllocations(roomId: string, page = 1) {
+    const history = await request<RoomAllocationHistory | RoomAllocation[]>(
+      `/rooms/${encodeURIComponent(roomId)}/allocations${queryString({ page: String(page) })}`,
+    );
+    if (isRoomAllocationHistory(history)) {
+      return history;
+    }
+    if (Array.isArray(history)) {
+      return normalizeLegacyRoomHistory(history, page);
+    }
+    throw new Error("Room history service returned an invalid response.");
+  },
+  getRoomBookingBoard: (from: string, to: string) =>
+    request<RoomBookingBoard>(
+      `/rooms/booking-board${queryString({ from, to })}`,
+    ),
   nextInvoiceNumber: (prefix: string, invoiceDate: string) =>
     request<{ invNo: string }>(
       `/invoices/next-number?${new URLSearchParams({ prefix, invoiceDate })}`,

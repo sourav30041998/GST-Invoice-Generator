@@ -23,18 +23,23 @@ const viewMeta: Record<ViewName, { title: string; sub: string }> = {
     title: "Invoice History",
     sub: "Browse, filter, update, cancel, and re-download past invoices",
   },
+  rooms: {
+    title: "Room Directory",
+    sub: "Manage rooms available to this organization’s invoices",
+  },
   settings: {
     title: "Company Profile",
     sub: "Manage the business details used by this company’s invoices",
   },
   about: {
     title: "About & Help",
-    sub: "GST preset reference and system notes",
+    sub: "System notes and invoice guidance",
   },
 };
 
 const workflowStatusLabels: Record<InvoiceWorkflowStatus, string> = {
   draft: "Draft",
+  reserved: "Reserved",
   checkedIn: "Checked In",
   checkedOut: "Checked Out",
   cancelled: "Cancelled",

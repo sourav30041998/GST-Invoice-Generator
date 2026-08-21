@@ -8,6 +8,8 @@ import { InvoiceModel } from "../models/Invoice.js";
 import { OrganizationModel } from "../models/Organization.js";
 import { OrganizationInvitationModel } from "../models/OrganizationInvitation.js";
 import { ReferenceDataModel } from "../models/ReferenceData.js";
+import { RoomAllocationModel } from "../models/RoomAllocation.js";
+import { RoomModel } from "../models/Room.js";
 import { SchemaMigrationModel } from "../models/SchemaMigration.js";
 import { SessionModel } from "../models/Session.js";
 import { SettingModel } from "../models/Setting.js";
@@ -22,6 +24,8 @@ const models = [
   OrganizationModel,
   OrganizationInvitationModel,
   ReferenceDataModel,
+  RoomAllocationModel,
+  RoomModel,
   SchemaMigrationModel,
   SessionModel,
   SettingModel,

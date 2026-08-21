@@ -20,6 +20,7 @@ import invoiceRoutes from "./routes/invoiceRoutes.js";
 import invitationRoutes from "./routes/invitationRoutes.js";
 import internalRoutes from "./routes/internalRoutes.js";
 import referenceDataRoutes from "./routes/referenceDataRoutes.js";
+import roomRoutes from "./routes/roomRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 
 export const app = express();
@@ -98,6 +99,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/invitations", invitationRoutes);
 app.use("/api/reference-data", requireAuth, referenceDataRoutes);
+app.use("/api/rooms", requireAuth, requireCsrf, roomRoutes);
 app.use("/api/settings", requireAuth, requireCsrf, settingsRoutes);
 app.use("/api/invoices", requireAuth, requireCsrf, invoiceRoutes);
 

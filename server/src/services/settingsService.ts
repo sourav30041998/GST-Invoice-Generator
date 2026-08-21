@@ -1,8 +1,13 @@
 import { defaultPreset } from "../config/defaultPreset.js";
 import type { ClientSession } from "mongoose";
+import {
+  freshDefaultTaxPresets,
+  type TaxPreset,
+} from "../config/defaultTaxPresets.js";
 import { BusinessProfileModel } from "../models/BusinessProfile.js";
 import { OrganizationModel } from "../models/Organization.js";
 import type { PresetPayload } from "../validation/invoiceSchemas.js";
+import type { TaxPresetPreferences } from "../validation/settingsSchemas.js";
 
 type PresetShape = typeof defaultPreset;
 
@@ -28,6 +33,7 @@ type BusinessProfileShape = {
     accountNumber?: string;
     ifsc?: string;
   };
+  taxPresets?: TaxPreset[];
   terms?: string;
   logoDataUrl?: string;
   isActive?: boolean;
@@ -35,6 +41,14 @@ type BusinessProfileShape = {
 
 function profileKey(organizationId: string) {
   return `organization-${organizationId}`;
+}
+
+function reusableTaxPresets(taxPresets?: TaxPreset[]) {
+  return (taxPresets || []).filter(
+    (preset) =>
+      preset.key.trim().toLowerCase() !== "custom" &&
+      preset.label.trim().toLowerCase() !== "custom",
+  );
 }
 
 function presetToProfile(
@@ -131,7 +145,10 @@ async function getOrCreateBusinessProfile(organizationId: string) {
   const profile = await BusinessProfileModel.findOneAndUpdate(
     { organizationId },
     {
-      $setOnInsert: presetToProfile(organizationId, defaultPreset),
+      $setOnInsert: {
+        ...presetToProfile(organizationId, defaultPreset),
+        taxPresets: freshDefaultTaxPresets(),
+      },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   ).lean();
@@ -157,7 +174,12 @@ export async function createInitialBusinessProfile(
   };
   await BusinessProfileModel.findOneAndUpdate(
     { organizationId },
-    { $setOnInsert: presetToProfile(organizationId, preset) },
+    {
+      $setOnInsert: {
+        ...presetToProfile(organizationId, preset),
+        taxPresets: freshDefaultTaxPresets(),
+      },
+    },
     { upsert: true, new: true, setDefaultsOnInsert: true, session },
   );
 }
@@ -173,8 +195,22 @@ export async function getLogoDataUrl(organizationId: string) {
 
 export async function getSettings(organizationId: string) {
   const profile = await getOrCreateBusinessProfile(organizationId);
+  const storedTaxPresets = profile.taxPresets || [];
+  const savedTaxPresets = reusableTaxPresets(profile.taxPresets);
+  const taxPresets =
+    savedTaxPresets.length > 0 ? savedTaxPresets : freshDefaultTaxPresets();
+
+  if (storedTaxPresets.length !== taxPresets.length) {
+    await BusinessProfileModel.updateOne(
+      { organizationId },
+      { $set: { taxPresets } },
+      { runValidators: true },
+    );
+  }
+
   return {
     preset: profileToPreset(profile),
+    taxPresets,
     logoDataUrl: profile.logoDataUrl || null,
   };
 }
@@ -215,6 +251,24 @@ export async function savePreset(
     },
   );
   return profileToPreset(profile);
+}
+
+export async function saveTaxPresets(
+  organizationId: string,
+  taxPresets: TaxPresetPreferences,
+) {
+  await getOrCreateBusinessProfile(organizationId);
+  const profile = await BusinessProfileModel.findOneAndUpdate(
+    { organizationId },
+    { $set: { taxPresets } },
+    { new: true, runValidators: true },
+  ).lean();
+
+  if (!profile) {
+    throw new Error("Could not save GST preset preferences");
+  }
+
+  return profile.taxPresets;
 }
 
 export async function saveLogo(organizationId: string, dataUrl: string) {

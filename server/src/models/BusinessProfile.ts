@@ -29,6 +29,20 @@ const bankDetailsSchema = new Schema(
   { _id: false },
 );
 
+const taxPresetSchema = new Schema(
+  {
+    key: { type: String, required: true, trim: true, maxlength: 80 },
+    label: { type: String, required: true, trim: true, maxlength: 80 },
+    hsn: { type: String, default: "", trim: true, maxlength: 16 },
+    cgstRate: { type: Number, required: true, min: 0, max: 100 },
+    sgstRate: { type: Number, required: true, min: 0, max: 100 },
+    igstRate: { type: Number, required: true, min: 0, max: 100 },
+    allowInclusive: { type: Boolean, default: false },
+    note: { type: String, default: "", trim: true, maxlength: 240 },
+  },
+  { _id: false },
+);
+
 const businessProfileSchema = new Schema(
   {
     organizationId: {
@@ -58,6 +72,20 @@ const businessProfileSchema = new Schema(
       uppercase: true,
     },
     bankDetails: { type: bankDetailsSchema, default: () => ({}) },
+    taxPresets: {
+      type: [taxPresetSchema],
+      default: [],
+      validate: {
+        validator: (presets: Array<{ key?: string; label?: string }> = []) =>
+          presets.every(
+            (preset) =>
+              preset.key?.trim().toLowerCase() !== "custom" &&
+              preset.label?.trim().toLowerCase() !== "custom",
+          ),
+        message:
+          "Custom is invoice-only and cannot be stored as a company preset",
+      },
+    },
     terms: { type: String, default: "", trim: true },
     logoDataUrl: { type: String, default: "" },
     isActive: { type: Boolean, default: true, index: true },

@@ -1,6 +1,6 @@
-import { Building2, Clock, FilePlus2, HelpCircle } from "lucide-react";
+import { BedDouble, Building2, Clock, FilePlus2, HelpCircle } from "lucide-react";
 
-export type ViewName = "create" | "history" | "settings" | "about";
+export type ViewName = "create" | "history" | "rooms" | "settings" | "about";
 
 type SidebarProps = {
   activeView: ViewName;
@@ -21,6 +21,12 @@ const navItems = [
     label: "Invoice History",
     icon: Clock,
     section: "Invoices",
+  },
+  {
+    view: "rooms" as const,
+    label: "Room Directory",
+    icon: BedDouble,
+    section: "Company",
   },
   {
     view: "settings" as const,

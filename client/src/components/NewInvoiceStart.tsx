@@ -24,6 +24,7 @@ type StatusView = {
 const statusViews: StatusView[] = [
   { key: "all", label: "All" },
   { key: "draft", label: "Draft" },
+  { key: "reserved", label: "Reserved" },
   { key: "checkedIn", label: "Checked In" },
   { key: "checkedOut", label: "Checked Out" },
   { key: "cancelled", label: "Cancelled" },

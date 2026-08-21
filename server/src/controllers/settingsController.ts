@@ -8,8 +8,10 @@ import {
   removeLogo,
   saveLogo,
   savePreset,
+  saveTaxPresets,
 } from "../services/settingsService.js";
 import { logoSchema, presetSchema } from "../validation/invoiceSchemas.js";
+import { taxPresetPreferencesPayloadSchema } from "../validation/settingsSchemas.js";
 
 export const readSettings: RequestHandler = async (_req, res, next) => {
   try {
@@ -25,6 +27,18 @@ export const updatePreset: RequestHandler = async (req, res, next) => {
     const preset = presetSchema.parse(req.body);
     const tenant = getAuthContext(res);
     res.json({ preset: await savePreset(tenant.organizationId, preset) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateTaxPresets: RequestHandler = async (req, res, next) => {
+  try {
+    const { taxPresets } = taxPresetPreferencesPayloadSchema.parse(req.body);
+    const tenant = getAuthContext(res);
+    res.json({
+      taxPresets: await saveTaxPresets(tenant.organizationId, taxPresets),
+    });
   } catch (error) {
     next(error);
   }

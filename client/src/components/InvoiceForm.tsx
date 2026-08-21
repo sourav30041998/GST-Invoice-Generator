@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  BedDouble,
   CalendarDays,
   FilePlus2,
   FileText,
@@ -11,7 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import { emptyLineItem, taxPresets } from "../constants";
+import { emptyLineItem, invoiceCustomTaxPreset } from "../constants";
 import { findIndianState, indianStates } from "../data/indianStates";
 import { StateCombobox } from "./StateCombobox";
 import type {
@@ -23,6 +24,8 @@ import type {
   InvoicePayload,
   InvoiceWorkflowStatus,
   LineItemInput,
+  Room,
+  TaxPreset,
 } from "../types";
 import {
   calculateInvoiceTotals,
@@ -42,6 +45,7 @@ type InvoiceFormTab = "details" | "items";
 
 type InvoiceFormProps = {
   nextInvoiceNo: string;
+  taxPresets: TaxPreset[];
   editingInvoice: Invoice | null;
   activeDraft: InvoiceDraft | null;
   onInvoiceDateChange: (date: string) => void;
@@ -62,16 +66,25 @@ const initialForm = (): FormState => ({
   partyAddress: "",
   partyState: "",
   groupName: "",
-  roomNo: "",
+  rooms: [],
   workflowStatus: "draft",
 });
 
-const initialLineItems = (): LineItemInput[] => {
+const initialLineItems = (taxPresets: TaxPreset[]): LineItemInput[] => {
   const invoiceDate = todayIso();
-  return [
-    emptyLineItem("Rooms <= Rs.7500/day", invoiceDate),
-    emptyLineItem("Food Bill", invoiceDate),
-  ];
+  const preferredKeys = ["Rooms <= Rs.7500/day", "Food Bill"];
+  const preferredPresets = preferredKeys.flatMap((key) => {
+    const preset = taxPresets.find((item) => item.key === key);
+    return preset ? [preset] : [];
+  });
+  const remainingPresets = taxPresets.filter(
+    (preset) => !preferredKeys.includes(preset.key),
+  );
+  const initialPresets = [...preferredPresets, ...remainingPresets].slice(0, 2);
+
+  return (
+    initialPresets.length > 0 ? initialPresets : [invoiceCustomTaxPreset]
+  ).map((preset) => emptyLineItem(preset.key, invoiceDate, taxPresets));
 };
 
 const makeAdjustment = (): AdjustmentInput => ({
@@ -89,7 +102,8 @@ function RequiredLabel({ children }: { children: string }) {
   );
 }
 
-const canUseInclusive = (presetKey: string) =>
+const canUseInclusive = (taxPresets: TaxPreset[], presetKey: string) =>
+  presetKey === invoiceCustomTaxPreset.key ||
   taxPresets.find((preset) => preset.key === presetKey)?.allowInclusive;
 
 function cleanPayload(
@@ -153,6 +167,7 @@ function formSnapshot(
 }
 export function InvoiceForm({
   nextInvoiceNo,
+  taxPresets,
   editingInvoice,
   activeDraft,
   onInvoiceDateChange,
@@ -164,7 +179,7 @@ export function InvoiceForm({
 }: InvoiceFormProps) {
   const [form, setForm] = useState<FormState>(() => initialForm());
   const [lineItems, setLineItems] = useState<LineItemInput[]>(() =>
-    initialLineItems(),
+    initialLineItems(taxPresets),
   );
   const [adjustments, setAdjustments] = useState<AdjustmentInput[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -178,6 +193,10 @@ export function InvoiceForm({
   const [backConfirmOpen, setBackConfirmOpen] = useState(false);
   const [stateOptions, setStateOptions] =
     useState<readonly string[]>(indianStates);
+  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [roomSearch, setRoomSearch] = useState("");
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomLoadError, setRoomLoadError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const totals = useMemo(
@@ -187,13 +206,13 @@ export function InvoiceForm({
 
   const resetInvoiceForm = useCallback(() => {
     setForm(initialForm());
-    setLineItems(initialLineItems());
+    setLineItems(initialLineItems(taxPresets));
     setAdjustments([]);
     setDraftId(null);
     setStatusVisible(false);
     setLastSavedSnapshot(null);
     setActiveTab("details");
-  }, []);
+  }, [taxPresets]);
 
   useEffect(() => {
     const loadIndianStates = async () => {
@@ -215,6 +234,51 @@ export function InvoiceForm({
   }, [form.invDate, onInvoiceDateChange]);
 
   useEffect(() => {
+    if (
+      !form.checkinDate ||
+      !form.checkoutDate ||
+      form.checkinDate >= form.checkoutDate
+    ) {
+      setAvailableRooms([]);
+      setRoomLoadError("");
+      setRoomsLoading(false);
+      return;
+    }
+
+    let current = true;
+    setRoomsLoading(true);
+    setRoomLoadError("");
+    void api
+      .listAvailableRooms(
+        form.checkinDate,
+        form.checkoutDate,
+        editingInvoice?._id,
+      )
+      .then((rooms) => {
+        if (current) {
+          setAvailableRooms(rooms);
+        }
+      })
+      .catch((error) => {
+        if (current) {
+          setAvailableRooms([]);
+          setRoomLoadError(
+            error instanceof Error ? error.message : "Could not load rooms.",
+          );
+        }
+      })
+      .finally(() => {
+        if (current) {
+          setRoomsLoading(false);
+        }
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [editingInvoice?._id, form.checkinDate, form.checkoutDate]);
+
+  useEffect(() => {
     if (editingInvoice) {
       const nextForm: FormState = {
         invDate: editingInvoice.invDate,
@@ -226,7 +290,9 @@ export function InvoiceForm({
         partyAddress: editingInvoice.partyAddress || "",
         partyState: editingInvoice.partyState || "",
         groupName: editingInvoice.groupName || "",
-        roomNo: editingInvoice.roomNo || "",
+        rooms: (editingInvoice.rooms || []).map((room) => ({
+          roomId: room.roomId,
+        })),
         workflowStatus: editingInvoice.workflowStatus || "checkedOut",
       };
       const nextLineItems = editingInvoice.lineItems.map((item) => ({
@@ -261,7 +327,9 @@ export function InvoiceForm({
         partyAddress: activeDraft.partyAddress || "",
         partyState: activeDraft.partyState || "",
         groupName: activeDraft.groupName || "",
-        roomNo: activeDraft.roomNo || "",
+        rooms: (activeDraft.rooms || []).map((room) => ({
+          roomId: room.roomId,
+        })),
         workflowStatus: activeDraft.workflowStatus,
       };
       const nextLineItems = activeDraft.lineItems.map((item) => ({
@@ -288,8 +356,23 @@ export function InvoiceForm({
     resetInvoiceForm();
   }, [editingInvoice, activeDraft, resetInvoiceForm]);
 
-  const updateForm = (key: keyof FormState, value: string) => {
+  const updateForm = (
+    key: Exclude<keyof FormState, "rooms">,
+    value: string,
+  ) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const toggleRoom = (roomId: string) => {
+    setForm((current) => {
+      const selected = current.rooms.some((room) => room.roomId === roomId);
+      return {
+        ...current,
+        rooms: selected
+          ? current.rooms.filter((room) => room.roomId !== roomId)
+          : [...current.rooms, { roomId }],
+      };
+    });
   };
 
   const updateLine = (id: string, patch: Partial<LineItemInput>) => {
@@ -307,21 +390,26 @@ export function InvoiceForm({
   const addLine = (presetKey = "Custom") => {
     setLineItems((current) => [
       ...current,
-      emptyLineItem(presetKey, form.checkinDate || form.invDate),
+      emptyLineItem(presetKey, form.checkinDate || form.invDate, taxPresets),
     ]);
   };
 
   const handlePresetChange = (id: string, presetKey: string) => {
     const preset =
-      taxPresets.find((item) => item.key === presetKey) ||
-      taxPresets[taxPresets.length - 1];
+      presetKey === invoiceCustomTaxPreset.key
+        ? invoiceCustomTaxPreset
+        : taxPresets.find((item) => item.key === presetKey);
+    if (!preset) {
+      return;
+    }
     updateLine(id, {
       presetKey,
+      description: preset.note,
       hsn: preset.hsn,
       cgstRate: preset.cgstRate,
       sgstRate: preset.sgstRate,
       igstRate: preset.igstRate,
-      taxInclusive: preset.allowInclusive ? false : false,
+      taxInclusive: false,
     });
   };
 
@@ -338,6 +426,41 @@ export function InvoiceForm({
     (form.workflowStatus === "draft"
       ? "Not generated for draft"
       : nextInvoiceNo || "Will be generated on save");
+  const selectedRoomIds = useMemo(
+    () => new Set(form.rooms.map((room) => room.roomId)),
+    [form.rooms],
+  );
+  const roomOptions = useMemo(() => {
+    const search = roomSearch.trim().toLowerCase();
+    return availableRooms.filter((room) => {
+      if (!search) return true;
+      return [room.roomNumber, room.roomType, room.floor, room.wing]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
+  }, [availableRooms, roomSearch]);
+  const selectedRoomDetails = useMemo(() => {
+    const knownRooms = new Map<
+      string,
+      { roomNumber: string; roomType: string }
+    >();
+    availableRooms.forEach((room) => {
+      knownRooms.set(room._id, room);
+    });
+    editingInvoice?.rooms?.forEach((room) => {
+      knownRooms.set(room.roomId, room);
+    });
+    activeDraft?.rooms?.forEach((room) => {
+      knownRooms.set(room.roomId, room);
+    });
+    return form.rooms.map((room) => ({
+      roomId: room.roomId,
+      roomNumber: knownRooms.get(room.roomId)?.roomNumber || "Unavailable room",
+      roomType: knownRooms.get(room.roomId)?.roomType || "",
+    }));
+  }, [activeDraft?.rooms, availableRooms, editingInvoice?.rooms, form.rooms]);
 
   useEffect(() => {
     onHeaderStateChange({
@@ -351,7 +474,7 @@ export function InvoiceForm({
     const requiredValues = [
       ["Arrival", form.checkinDate],
       ["Departure", form.checkoutDate],
-      ["Room No.", form.roomNo],
+      ["Rooms", form.rooms.length],
       ["Payee Name", form.partyName],
       ["State", form.partyState],
       ["Address", form.partyAddress],
@@ -530,14 +653,92 @@ export function InvoiceForm({
                   }
                 />
               </div>
-              <div className="field">
-                <RequiredLabel>Room No.</RequiredLabel>
-                <input
-                  className="input"
-                  value={form.roomNo}
-                  onChange={(event) => updateForm("roomNo", event.target.value)}
-                  required
-                />
+              <div className="field span-2 room-picker-field">
+                <RequiredLabel>Rooms</RequiredLabel>
+                <div className="room-picker">
+                  <div className="room-selection" aria-live="polite">
+                    {selectedRoomDetails.length ? (
+                      selectedRoomDetails.map((room) => (
+                        <span className="room-chip" key={room.roomId}>
+                          <BedDouble size={13} />
+                          {room.roomNumber}
+                          {room.roomType ? ` - ${room.roomType}` : ""}
+                          <button
+                            type="button"
+                            onClick={() => toggleRoom(room.roomId)}
+                            title={`Remove ${room.roomNumber}`}
+                          >
+                            <X size={13} />
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="room-picker-placeholder">
+                        Select one or more rooms
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    className="input room-search-input"
+                    value={roomSearch}
+                    onChange={(event) => setRoomSearch(event.target.value)}
+                    placeholder="Search available rooms"
+                    disabled={
+                      !form.checkinDate ||
+                      !form.checkoutDate ||
+                      form.checkinDate >= form.checkoutDate
+                    }
+                    aria-label="Search available rooms"
+                  />
+                  <div
+                    className="room-option-list"
+                    role="listbox"
+                    aria-multiselectable="true"
+                  >
+                    {!form.checkinDate || !form.checkoutDate ? (
+                      <span className="room-option-message">
+                        Choose arrival and departure dates first.
+                      </span>
+                    ) : form.checkinDate >= form.checkoutDate ? (
+                      <span className="room-option-message">
+                        Departure must be after arrival.
+                      </span>
+                    ) : roomsLoading ? (
+                      <span className="room-option-message">
+                        Checking room availability...
+                      </span>
+                    ) : roomLoadError ? (
+                      <span className="room-option-message error">
+                        {roomLoadError}
+                      </span>
+                    ) : roomOptions.length ? (
+                      roomOptions.map((room) => {
+                        const selected = selectedRoomIds.has(room._id);
+                        return (
+                          <button
+                            className={`room-option${selected ? " selected" : ""}`}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            key={room._id}
+                            onClick={() => toggleRoom(room._id)}
+                          >
+                            <span>{room.roomNumber}</span>
+                            <small>
+                              {[room.roomType, room.wing, room.floor]
+                                .filter(Boolean)
+                                .join(" - ") || "Standard room"}
+                            </small>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <span className="room-option-message">
+                        No rooms are available for these dates.
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
               {statusVisible ? (
                 <div className="field">
@@ -557,6 +758,7 @@ export function InvoiceForm({
                       <option value="cancelled">Cancelled</option>
                     ) : null}
                     <option value="draft">Draft</option>
+                    <option value="reserved">Reserved</option>
                     <option value="checkedIn">Checked In</option>
                     <option value="checkedOut">Checked Out</option>
                   </select>
@@ -655,6 +857,11 @@ export function InvoiceForm({
                 <tbody>
                   {lineItems.map((line, index) => {
                     const calculated = totals.lineItems[index];
+                    const currentPresetAvailable =
+                      line.presetKey === invoiceCustomTaxPreset.key ||
+                      taxPresets.some(
+                        (preset) => preset.key === line.presetKey,
+                      );
                     return (
                       <tr key={line.id}>
                         <td>
@@ -665,11 +872,19 @@ export function InvoiceForm({
                               handlePresetChange(line.id, event.target.value)
                             }
                           >
+                            {!currentPresetAvailable ? (
+                              <option value={line.presetKey}>
+                                {line.presetKey} (saved)
+                              </option>
+                            ) : null}
                             {taxPresets.map((preset) => (
                               <option key={preset.key} value={preset.key}>
                                 {preset.label}
                               </option>
                             ))}
+                            <option value={invoiceCustomTaxPreset.key}>
+                              {invoiceCustomTaxPreset.label}
+                            </option>
                           </select>
                           <input
                             className="table-input"
@@ -681,7 +896,7 @@ export function InvoiceForm({
                             }
                             placeholder="Description"
                           />
-                          {canUseInclusive(line.presetKey) ? (
+                          {canUseInclusive(taxPresets, line.presetKey) ? (
                             <label className="inclusive-check">
                               <input
                                 type="checkbox"

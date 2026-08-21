@@ -31,6 +31,15 @@ const adjustmentSchema = new Schema(
   { _id: false },
 );
 
+const roomSnapshotSchema = new Schema(
+  {
+    roomId: { type: Schema.Types.ObjectId, ref: "Room", required: true },
+    roomNumber: { type: String, required: true, trim: true, maxlength: 40 },
+    roomType: { type: String, default: "", trim: true, maxlength: 80 },
+  },
+  { _id: false },
+);
+
 const invoiceDraftSchema = new Schema(
   {
     organizationId: {
@@ -51,6 +60,7 @@ const invoiceDraftSchema = new Schema(
     partyState: { type: String, default: "" },
     groupName: { type: String, default: "" },
     roomNo: { type: String, default: "" },
+    rooms: { type: [roomSnapshotSchema], default: [] },
     workflowStatus: {
       type: String,
       enum: ["draft"],

@@ -1,9 +1,10 @@
-import { Types } from "mongoose";
+import mongoose, { ClientSession, Types } from "mongoose";
 import { ApiError } from "../middleware/errorHandler.js";
 import { AuditLogModel } from "../models/AuditLog.js";
 import { CounterModel } from "../models/Counter.js";
 import { InvoiceModel } from "../models/Invoice.js";
 import { InvoiceDraftModel } from "../models/InvoiceDraft.js";
+import { RoomAllocationModel } from "../models/RoomAllocation.js";
 import { calculateInvoiceTotals } from "../utils/calculateInvoice.js";
 import { toCsv } from "../utils/csv.js";
 import { todayLocalIso, toInvoiceMonth } from "../utils/date.js";
@@ -13,6 +14,11 @@ import type {
   InvoiceWorkbenchQuery,
 } from "../validation/invoiceSchemas.js";
 import { getBusinessProfileSnapshot } from "./settingsService.js";
+import {
+  resolveRoomSnapshots,
+  syncRoomAllocations,
+  type RoomSnapshot,
+} from "./roomService.js";
 
 export type TenantContext = {
   organizationId: string;
@@ -21,7 +27,11 @@ export type TenantContext = {
 };
 
 type PersistedWorkflowStatus =
-  "draft" | "checkedIn" | "checkedOut" | "cancelled";
+  | "draft"
+  | "reserved"
+  | "checkedIn"
+  | "checkedOut"
+  | "cancelled";
 type InvoiceWorkbenchStatus = "all" | PersistedWorkflowStatus;
 
 type PresetSnapshot = {
@@ -74,6 +84,7 @@ function defaultWorkflowStatus(invoice: {
 }): PersistedWorkflowStatus {
   if (
     invoice.workflowStatus === "draft" ||
+    invoice.workflowStatus === "reserved" ||
     invoice.workflowStatus === "checkedIn" ||
     invoice.workflowStatus === "checkedOut" ||
     invoice.workflowStatus === "cancelled"
@@ -132,6 +143,7 @@ async function consumeInvoiceNumber(
   tenant: TenantContext,
   prefix: string,
   invoiceDate?: string,
+  session?: ClientSession,
 ) {
   const safePrefix = prefix.toUpperCase();
   const month = toInvoiceMonth(invoiceDate);
@@ -147,7 +159,7 @@ async function consumeInvoiceNumber(
       },
       $inc: { sequence: 1 },
     },
-    { upsert: true, new: true },
+    { upsert: true, new: true, ...(session ? { session } : {}) },
   ).lean();
 
   return {
@@ -177,10 +189,14 @@ function buildInvoiceDocument(
   tenant: TenantContext,
   payload: InvoicePayload,
   snapshots: ResolvedSnapshots,
+  rooms: RoomSnapshot[],
 ) {
   const totals = calculateInvoiceTotals(payload.lineItems, payload.adjustments);
+  const { rooms: _selectedRooms, ...invoicePayload } = payload;
   return {
-    ...payload,
+    ...invoicePayload,
+    rooms,
+    roomNo: rooms.map((room) => room.roomNumber).join(", "),
     ...totals,
     organizationId: tenant.organizationId,
     businessProfileId: snapshots.businessProfileId,
@@ -189,6 +205,24 @@ function buildInvoiceDocument(
     createdBy: tenant.userEmail,
     createdByUserId: tenant.userId,
   };
+}
+
+async function runInvoiceTransaction<T>(
+  operation: (session: ClientSession) => Promise<T>,
+) {
+  const session = await mongoose.startSession();
+  try {
+    let result: T | undefined;
+    await session.withTransaction(async () => {
+      result = await operation(session);
+    });
+    if (result === undefined) {
+      throw new ApiError(500, "Could not complete invoice update");
+    }
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function createInvoice(
@@ -201,21 +235,44 @@ export async function createInvoice(
 
   const snapshots = await getBusinessProfileSnapshot(tenant.organizationId);
   const invDate = payload.invDate || todayLocalIso();
-  const numbering = await consumeInvoiceNumber(
-    tenant,
-    String(snapshots.presetSnapshot.invoice_prefix || "INV"),
-    invDate,
-  );
-  const document = buildInvoiceDocument(
-    tenant,
-    { ...payload, invDate },
-    snapshots,
-  );
-  const invoice = await InvoiceModel.create({
-    ...document,
-    ...numbering,
-    status: "active",
-    recordStatus: "active",
+  const invoice = await runInvoiceTransaction(async (session) => {
+    const rooms = await resolveRoomSnapshots(
+      tenant,
+      payload.rooms.map((room) => room.roomId),
+      session,
+    );
+    const numbering = await consumeInvoiceNumber(
+      tenant,
+      String(snapshots.presetSnapshot.invoice_prefix || "INV"),
+      invDate,
+      session,
+    );
+    const document = buildInvoiceDocument(
+      tenant,
+      { ...payload, invDate },
+      snapshots,
+      rooms,
+    );
+    const createdInvoice = new InvoiceModel({
+      ...document,
+      ...numbering,
+      status: "active",
+      recordStatus: "active",
+    });
+    await createdInvoice.save({ session });
+    await syncRoomAllocations(
+      tenant,
+      {
+        invoiceId: String(createdInvoice._id),
+        invoiceNumber: createdInvoice.invNo,
+        rooms,
+        checkinDate: createdInvoice.checkinDate,
+        checkoutDate: createdInvoice.checkoutDate,
+        workflowStatus: createdInvoice.workflowStatus as "reserved" | "checkedIn" | "checkedOut",
+      },
+      session,
+    );
+    return createdInvoice;
   });
   await writeAuditLog(
     tenant,
@@ -234,10 +291,15 @@ export async function createInvoiceDraft(
 ) {
   const snapshots = await getBusinessProfileSnapshot(tenant.organizationId);
   const invDate = payload.invDate || todayLocalIso();
+  const rooms = await resolveRoomSnapshots(
+    tenant,
+    payload.rooms.map((room) => room.roomId),
+  );
   const document = buildInvoiceDocument(
     tenant,
     { ...payload, invDate, workflowStatus: "draft" },
     snapshots,
+    rooms,
   );
   const draft = await InvoiceDraftModel.create(document);
   await writeAuditLog(
@@ -270,10 +332,15 @@ export async function updateInvoiceDraft(
   const invDate = payload.invDate || draft.invDate || todayLocalIso();
 
   if (payload.workflowStatus === "draft") {
+    const rooms = await resolveRoomSnapshots(
+      tenant,
+      payload.rooms.map((room) => room.roomId),
+    );
     const document = buildInvoiceDocument(
       tenant,
       { ...payload, invDate, workflowStatus: "draft" },
       snapshots,
+      rooms,
     );
     Object.assign(draft, document);
     await draft.save();
@@ -288,26 +355,49 @@ export async function updateInvoiceDraft(
     return draft;
   }
 
-  const numbering = await consumeInvoiceNumber(
-    tenant,
-    String(snapshots.presetSnapshot.invoice_prefix || "INV"),
-    invDate,
-  );
-  const document = buildInvoiceDocument(
-    tenant,
-    { ...payload, invDate },
-    snapshots,
-  );
-  const invoice = await InvoiceModel.create({
-    ...document,
-    ...numbering,
-    sourceDraftId: draft._id,
-    status: "active",
-    recordStatus: "active",
-  });
-  await InvoiceDraftModel.deleteOne({
-    _id: draft._id,
-    organizationId: tenant.organizationId,
+  const invoice = await runInvoiceTransaction(async (session) => {
+    const rooms = await resolveRoomSnapshots(
+      tenant,
+      payload.rooms.map((room) => room.roomId),
+      session,
+    );
+    const numbering = await consumeInvoiceNumber(
+      tenant,
+      String(snapshots.presetSnapshot.invoice_prefix || "INV"),
+      invDate,
+      session,
+    );
+    const document = buildInvoiceDocument(
+      tenant,
+      { ...payload, invDate },
+      snapshots,
+      rooms,
+    );
+    const createdInvoice = new InvoiceModel({
+      ...document,
+      ...numbering,
+      sourceDraftId: draft._id,
+      status: "active",
+      recordStatus: "active",
+    });
+    await createdInvoice.save({ session });
+    await syncRoomAllocations(
+      tenant,
+      {
+        invoiceId: String(createdInvoice._id),
+        invoiceNumber: createdInvoice.invNo,
+        rooms,
+        checkinDate: createdInvoice.checkinDate,
+        checkoutDate: createdInvoice.checkoutDate,
+        workflowStatus: createdInvoice.workflowStatus as "reserved" | "checkedIn" | "checkedOut",
+      },
+      session,
+    );
+    await InvoiceDraftModel.deleteOne({
+      _id: draft._id,
+      organizationId: tenant.organizationId,
+    }).session(session);
+    return createdInvoice;
   });
   await writeAuditLog(
     tenant,
@@ -396,25 +486,80 @@ export async function updateInvoice(
   if (invoice.status === "cancelled") {
     throw new ApiError(409, "Cancelled invoices cannot be edited");
   }
+  const currentWorkflowStatus = defaultWorkflowStatus(invoice);
+  if (currentWorkflowStatus === "checkedOut") {
+    throw new ApiError(
+      409,
+      "Checked-out invoices are locked. Cancel and issue a corrected invoice instead.",
+    );
+  }
+  if (payload.workflowStatus === "draft") {
+    throw new ApiError(422, "Use a draft to save an incomplete invoice");
+  }
+  if (
+    currentWorkflowStatus === "checkedIn" &&
+    payload.workflowStatus !== "checkedIn" &&
+    payload.workflowStatus !== "checkedOut"
+  ) {
+    throw new ApiError(
+      409,
+      "A checked-in invoice can only remain checked in or be checked out.",
+    );
+  }
 
   const before = toPlainDocument(invoice);
   const snapshots = await resolveSnapshots(tenant, invoice as SnapshotSource);
-  const document = buildInvoiceDocument(
-    tenant,
-    { ...payload, invDate: invoice.invDate },
-    snapshots,
-  );
-  Object.assign(invoice, { ...document, recordStatus: invoice.status });
-  await invoice.save();
+  const updatedInvoice = await runInvoiceTransaction(async (session) => {
+    const currentInvoice = await InvoiceModel.findOne({
+      organizationId: tenant.organizationId,
+      invNo,
+    }).session(session);
+    if (!currentInvoice || currentInvoice.status === "cancelled") {
+      throw new ApiError(409, "Invoice is no longer available for editing");
+    }
+    if (defaultWorkflowStatus(currentInvoice) === "checkedOut") {
+      throw new ApiError(409, "Checked-out invoices are locked");
+    }
+
+    const rooms = await resolveRoomSnapshots(
+      tenant,
+      payload.rooms.map((room) => room.roomId),
+      session,
+    );
+    const document = buildInvoiceDocument(
+      tenant,
+      { ...payload, invDate: currentInvoice.invDate },
+      snapshots,
+      rooms,
+    );
+    Object.assign(currentInvoice, {
+      ...document,
+      recordStatus: currentInvoice.status,
+    });
+    await currentInvoice.save({ session });
+    await syncRoomAllocations(
+      tenant,
+      {
+        invoiceId: String(currentInvoice._id),
+        invoiceNumber: currentInvoice.invNo,
+        rooms,
+        checkinDate: currentInvoice.checkinDate,
+        checkoutDate: currentInvoice.checkoutDate,
+        workflowStatus: currentInvoice.workflowStatus as "reserved" | "checkedIn" | "checkedOut",
+      },
+      session,
+    );
+    return currentInvoice;
+  });
   await writeAuditLog(
     tenant,
     "invoice",
-    invoice._id,
+    updatedInvoice._id,
     "update",
     before,
-    toPlainDocument(invoice),
+    toPlainDocument(updatedInvoice),
   );
-  return invoice;
+  return updatedInvoice;
 }
 
 function invoiceFilters(tenant: TenantContext, query: InvoiceQuery) {
@@ -506,6 +651,7 @@ function emptyWorkbenchCounts() {
   return {
     all: 0,
     draft: 0,
+    reserved: 0,
     checkedIn: 0,
     checkedOut: 0,
     cancelled: 0,
@@ -572,20 +718,46 @@ export async function cancelInvoice(tenant: TenantContext, invNo: string) {
   }
 
   const before = toPlainDocument(invoice);
-  invoice.status = "cancelled";
-  invoice.recordStatus = "cancelled";
-  invoice.workflowStatus = "cancelled";
-  invoice.cancelledAt = new Date();
-  await invoice.save();
+  const cancelledInvoice = await runInvoiceTransaction(async (session) => {
+    const currentInvoice = await InvoiceModel.findOne({
+      organizationId: tenant.organizationId,
+      invNo,
+    }).session(session);
+    if (!currentInvoice) {
+      throw new ApiError(404, "Invoice not found");
+    }
+    if (currentInvoice.status === "cancelled") {
+      return currentInvoice;
+    }
+
+    currentInvoice.status = "cancelled";
+    currentInvoice.recordStatus = "cancelled";
+    currentInvoice.workflowStatus = "cancelled";
+    currentInvoice.cancelledAt = new Date();
+    await currentInvoice.save({ session });
+    await syncRoomAllocations(
+      tenant,
+      {
+        invoiceId: String(currentInvoice._id),
+        invoiceNumber: currentInvoice.invNo,
+        rooms: [],
+        checkinDate: currentInvoice.checkinDate,
+        checkoutDate: currentInvoice.checkoutDate,
+        workflowStatus: "cancelled",
+      },
+      session,
+    );
+    return currentInvoice;
+  });
   await writeAuditLog(
     tenant,
     "invoice",
-    invoice._id,
+    cancelledInvoice._id,
     "cancel",
     before,
-    toPlainDocument(invoice),
+    toPlainDocument(cancelledInvoice),
   );
-  return invoice;
+  return cancelledInvoice;
 }
 
 export async function exportInvoicesCsv(
@@ -631,6 +803,7 @@ export async function clearCompanyData(tenant: TenantContext) {
   await Promise.all([
     InvoiceModel.deleteMany({ organizationId: tenant.organizationId }),
     InvoiceDraftModel.deleteMany({ organizationId: tenant.organizationId }),
+    RoomAllocationModel.deleteMany({ organizationId: tenant.organizationId }),
     CounterModel.deleteMany({ organizationId: tenant.organizationId }),
     AuditLogModel.deleteMany({ organizationId: tenant.organizationId }),
   ]);

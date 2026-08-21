@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { isValidStayRange } from "../utils/roomRules.js";
+import { selectedRoomSchema } from "./roomSchemas.js";
 
 const isoDateSchema = z
   .string()
@@ -11,12 +13,14 @@ const optionalText = (max: number, fallback = "") =>
 
 export const invoiceWorkflowStatusSchema = z.enum([
   "draft",
+  "reserved",
   "checkedIn",
   "checkedOut",
 ]);
 export const invoiceWorkflowQueryStatusSchema = z.enum([
   "",
   "draft",
+  "reserved",
   "checkedIn",
   "checkedOut",
   "cancelled",
@@ -24,6 +28,7 @@ export const invoiceWorkflowQueryStatusSchema = z.enum([
 export const invoiceWorkbenchStatusSchema = z.enum([
   "all",
   "draft",
+  "reserved",
   "checkedIn",
   "checkedOut",
   "cancelled",
@@ -122,14 +127,23 @@ export const invoicePayloadSchema = z
     partyAddress: shortText(500).min(1, "Address is required"),
     partyState: shortText(120).min(1, "State is required"),
     groupName: optionalText(160),
-    roomNo: shortText(80).min(1, "Room no. is required"),
+    rooms: z.array(selectedRoomSchema).min(1, "Select at least one room").max(20),
     workflowStatus: invoiceWorkflowStatusSchema
       .optional()
       .default("checkedOut"),
     lineItems: z.array(lineItemSchema).min(1).max(100),
     adjustments: z.array(adjustmentSchema).max(50).optional().default([]),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (!isValidStayRange(value.checkinDate, value.checkoutDate)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["checkoutDate"],
+        message: "Departure must be after arrival",
+      });
+    }
+  });
 
 export const invoiceQuerySchema = z
   .object({
