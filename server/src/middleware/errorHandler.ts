@@ -15,6 +15,7 @@ type HttpError = Error & {
   status?: number;
   statusCode?: number;
   type?: string;
+  name?: string;
 };
 
 export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
@@ -48,6 +49,14 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   if (httpError.code === 11000) {
     res.status(409).json({
       message: "A record with those unique details already exists",
+    });
+    return;
+  }
+
+  if (httpError.name === "VersionError") {
+    res.status(409).json({
+      message:
+        "This record was changed elsewhere. Reload it before trying again.",
     });
     return;
   }

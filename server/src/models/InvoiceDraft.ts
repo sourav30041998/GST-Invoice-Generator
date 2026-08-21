@@ -72,7 +72,7 @@ const invoiceDraftSchema = new Schema(
     createdBy: { type: String, default: "system", trim: true },
     createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
   },
-  { timestamps: true, minimize: false },
+  { timestamps: true, minimize: false, optimisticConcurrency: true },
 );
 
 invoiceDraftSchema.index({ organizationId: 1, createdAt: -1 });

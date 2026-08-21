@@ -101,12 +101,12 @@ export function HistoryView({
     }
   };
 
-  const cancel = async (invNo: string) => {
+  const cancel = async (invNo: string, version: number) => {
     if (!window.confirm(`Cancel invoice ${invNo}? This cannot be undone.`)) {
       return;
     }
     try {
-      await api.cancelInvoice(invNo);
+      await api.cancelInvoice(invNo, version);
       await loadInvoices();
       showToast(`Invoice ${invNo} cancelled.`);
     } catch (error) {
@@ -263,20 +263,23 @@ export function HistoryView({
                     <Download size={15} />
                     PDF
                   </button>
+                  <button
+                    className="btn btn-outline btn-small"
+                    type="button"
+                    onClick={() => edit(invoice.invNo)}
+                  >
+                    <Edit3 size={15} />
+                    {invoice.workflowStatus === "checkedIn" &&
+                    invoice.status !== "cancelled"
+                      ? "Edit"
+                      : "View"}
+                  </button>
                   {invoice.status !== "cancelled" ? (
                     <>
                       <button
-                        className="btn btn-outline btn-small"
-                        type="button"
-                        onClick={() => edit(invoice.invNo)}
-                      >
-                        <Edit3 size={15} />
-                        Edit
-                      </button>
-                      <button
                         className="icon-button danger"
                         type="button"
-                        onClick={() => cancel(invoice.invNo)}
+                        onClick={() => cancel(invoice.invNo, invoice.version)}
                       >
                         <Ban size={16} />
                       </button>

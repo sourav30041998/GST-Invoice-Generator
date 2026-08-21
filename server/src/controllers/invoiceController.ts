@@ -19,11 +19,14 @@ import {
 import { getPreset } from "../services/settingsService.js";
 import {
   draftIdParamSchema,
+  draftInvoicePayloadSchema,
   invoiceNumberParamSchema,
   invoicePayloadSchema,
   invoiceQuerySchema,
+  invoiceUpdatePayloadSchema,
   invoiceWorkbenchQuerySchema,
   nextInvoiceNumberQuerySchema,
+  revisionSchema,
 } from "../validation/invoiceSchemas.js";
 
 function tenantContext(res: Response): TenantContext {
@@ -64,7 +67,7 @@ export const createInvoiceDraftRecord: RequestHandler = async (
   next,
 ) => {
   try {
-    const payload = invoicePayloadSchema.parse(req.body);
+    const payload = draftInvoicePayloadSchema.parse(req.body);
     res.status(201).json(await createInvoiceDraft(tenantContext(res), payload));
   } catch (error) {
     next(error);
@@ -78,7 +81,7 @@ export const updateInvoiceDraftRecord: RequestHandler = async (
 ) => {
   try {
     const { draftId } = draftIdParamSchema.parse(req.params);
-    const payload = invoicePayloadSchema.parse(req.body);
+    const payload = invoiceUpdatePayloadSchema.parse(req.body);
     res.json(await updateInvoiceDraft(tenantContext(res), draftId, payload));
   } catch (error) {
     next(error);
@@ -113,7 +116,8 @@ export const deleteInvoiceDraftRecord: RequestHandler = async (
 ) => {
   try {
     const { draftId } = draftIdParamSchema.parse(req.params);
-    await deleteInvoiceDraft(tenantContext(res), draftId);
+    const { version } = revisionSchema.parse(req.body);
+    await deleteInvoiceDraft(tenantContext(res), draftId, version);
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -123,7 +127,7 @@ export const deleteInvoiceDraftRecord: RequestHandler = async (
 export const updateInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
     const { invNo } = invoiceNumberParamSchema.parse(req.params);
-    const payload = invoicePayloadSchema.parse(req.body);
+    const payload = invoiceUpdatePayloadSchema.parse(req.body);
     res.json(await updateInvoice(tenantContext(res), invNo, payload));
   } catch (error) {
     next(error);
@@ -164,7 +168,8 @@ export const getInvoiceRecord: RequestHandler = async (req, res, next) => {
 export const cancelInvoiceRecord: RequestHandler = async (req, res, next) => {
   try {
     const { invNo } = invoiceNumberParamSchema.parse(req.params);
-    res.json(await cancelInvoice(tenantContext(res), invNo));
+    const { version } = revisionSchema.parse(req.body);
+    res.json(await cancelInvoice(tenantContext(res), invNo, version));
   } catch (error) {
     next(error);
   }

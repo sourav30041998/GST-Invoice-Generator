@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import mongoose, { Types, type ClientSession } from "mongoose";
 import { ApiError } from "../middleware/errorHandler.js";
 import { AuditLogModel } from "../models/AuditLog.js";
 import { CounterModel } from "../models/Counter.js";
@@ -7,9 +7,14 @@ import { InvoiceDraftModel } from "../models/InvoiceDraft.js";
 import { calculateInvoiceTotals } from "../utils/calculateInvoice.js";
 import { toCsv } from "../utils/csv.js";
 import { todayLocalIso, toInvoiceMonth } from "../utils/date.js";
+import {
+  assertExpectedVersion,
+  assertInvoiceWorkflowTransition,
+} from "../utils/invoiceRules.js";
 import type {
   InvoicePayload,
   InvoiceQuery,
+  InvoiceUpdatePayload,
   InvoiceWorkbenchQuery,
 } from "../validation/invoiceSchemas.js";
 import { getBusinessProfileSnapshot } from "./settingsService.js";
@@ -58,6 +63,7 @@ type InvoiceWorkbenchSource = {
 
 type AuditDocument = {
   toObject?: () => unknown;
+  __v?: number;
 };
 
 function buildInvoiceNo(prefix: string, month: string, sequence: number) {
@@ -94,6 +100,23 @@ function toPlainDocument(document: AuditDocument | null | undefined) {
   return document?.toObject ? document.toObject() : document;
 }
 
+function documentVersion(document: unknown) {
+  const source = document as { __v?: unknown } | null | undefined;
+  return typeof source?.__v === "number" ? source.__v : 0;
+}
+
+function toResponseDocument(document: AuditDocument | null | undefined) {
+  const plain = toPlainDocument(document) as Record<string, unknown> | null;
+  if (!plain) {
+    return plain;
+  }
+
+  return {
+    ...plain,
+    version: typeof plain.__v === "number" ? plain.__v : 0,
+  };
+}
+
 async function writeAuditLog(
   tenant: TenantContext,
   entityType: string,
@@ -101,8 +124,9 @@ async function writeAuditLog(
   action: string,
   before: unknown,
   after: unknown,
+  session?: ClientSession,
 ) {
-  await AuditLogModel.create({
+  const entry = {
     organizationId: tenant.organizationId,
     actorUserId: tenant.userId,
     entityType,
@@ -111,7 +135,14 @@ async function writeAuditLog(
     before,
     after,
     createdBy: tenant.userEmail,
-  }).catch(() => undefined);
+  };
+
+  if (session) {
+    await AuditLogModel.create([entry], { session });
+    return;
+  }
+
+  await AuditLogModel.create(entry);
 }
 
 export async function peekInvoiceNumber(
@@ -132,6 +163,7 @@ async function consumeInvoiceNumber(
   tenant: TenantContext,
   prefix: string,
   invoiceDate?: string,
+  session?: ClientSession,
 ) {
   const safePrefix = prefix.toUpperCase();
   const month = toInvoiceMonth(invoiceDate);
@@ -147,7 +179,7 @@ async function consumeInvoiceNumber(
       },
       $inc: { sequence: 1 },
     },
-    { upsert: true, new: true },
+    { upsert: true, new: true, ...(session ? { session } : {}) },
   ).lean();
 
   return {
@@ -201,123 +233,194 @@ export async function createInvoice(
 
   const snapshots = await getBusinessProfileSnapshot(tenant.organizationId);
   const invDate = payload.invDate || todayLocalIso();
-  const numbering = await consumeInvoiceNumber(
-    tenant,
-    String(snapshots.presetSnapshot.invoice_prefix || "INV"),
-    invDate,
-  );
-  const document = buildInvoiceDocument(
-    tenant,
-    { ...payload, invDate },
-    snapshots,
-  );
-  const invoice = await InvoiceModel.create({
-    ...document,
-    ...numbering,
-    status: "active",
-    recordStatus: "active",
-  });
-  await writeAuditLog(
-    tenant,
-    "invoice",
-    invoice._id,
-    "create",
-    null,
-    toPlainDocument(invoice),
-  );
-  return invoice;
+  const session = await mongoose.startSession();
+
+  try {
+    const invoice = await session.withTransaction(async () => {
+      const numbering = await consumeInvoiceNumber(
+        tenant,
+        String(snapshots.presetSnapshot.invoice_prefix || "INV"),
+        invDate,
+        session,
+      );
+      const document = buildInvoiceDocument(
+        tenant,
+        { ...payload, invDate },
+        snapshots,
+      );
+      const [createdInvoice] = await InvoiceModel.create(
+        [
+          {
+            ...document,
+            ...numbering,
+            status: "active",
+            recordStatus: "active",
+          },
+        ],
+        { session },
+      );
+      await writeAuditLog(
+        tenant,
+        "invoice",
+        createdInvoice._id,
+        "create",
+        null,
+        toPlainDocument(createdInvoice),
+        session,
+      );
+      return toResponseDocument(createdInvoice);
+    });
+
+    if (!invoice) {
+      throw new ApiError(500, "Invoice creation did not complete");
+    }
+    return invoice;
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function createInvoiceDraft(
   tenant: TenantContext,
   payload: InvoicePayload,
 ) {
+  if (payload.workflowStatus !== "draft") {
+    throw new ApiError(422, "Draft invoices must use the draft status");
+  }
+
   const snapshots = await getBusinessProfileSnapshot(tenant.organizationId);
   const invDate = payload.invDate || todayLocalIso();
-  const document = buildInvoiceDocument(
-    tenant,
-    { ...payload, invDate, workflowStatus: "draft" },
-    snapshots,
-  );
-  const draft = await InvoiceDraftModel.create(document);
-  await writeAuditLog(
-    tenant,
-    "invoice_draft",
-    draft._id,
-    "create",
-    null,
-    toPlainDocument(draft),
-  );
-  return draft;
+  const session = await mongoose.startSession();
+
+  try {
+    const draft = await session.withTransaction(async () => {
+      const document = buildInvoiceDocument(
+        tenant,
+        { ...payload, invDate, workflowStatus: "draft" },
+        snapshots,
+      );
+      const [createdDraft] = await InvoiceDraftModel.create([document], {
+        session,
+      });
+      await writeAuditLog(
+        tenant,
+        "invoice_draft",
+        createdDraft._id,
+        "create",
+        null,
+        toPlainDocument(createdDraft),
+        session,
+      );
+      return toResponseDocument(createdDraft);
+    });
+
+    if (!draft) {
+      throw new ApiError(500, "Draft creation did not complete");
+    }
+    return draft;
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function updateInvoiceDraft(
   tenant: TenantContext,
   draftId: string,
-  payload: InvoicePayload,
+  payload: InvoiceUpdatePayload,
 ) {
   ensureObjectId(draftId);
-  const draft = await InvoiceDraftModel.findOne({
-    _id: draftId,
-    organizationId: tenant.organizationId,
-  });
-  if (!draft) {
-    throw new ApiError(404, "Draft not found");
+  const { version, ...invoicePayload } = payload;
+  const session = await mongoose.startSession();
+
+  try {
+    const result = await session.withTransaction(async () => {
+      const draft = await InvoiceDraftModel.findOne({
+        _id: draftId,
+        organizationId: tenant.organizationId,
+      }).session(session);
+      if (!draft) {
+        throw new ApiError(404, "Draft not found");
+      }
+      assertExpectedVersion(documentVersion(draft), version, "Draft");
+
+      const before = toPlainDocument(draft);
+      const snapshots = await resolveSnapshots(tenant, draft as SnapshotSource);
+      const invDate =
+        invoicePayload.invDate || draft.invDate || todayLocalIso();
+
+      if (invoicePayload.workflowStatus === "draft") {
+        const document = buildInvoiceDocument(
+          tenant,
+          { ...invoicePayload, invDate, workflowStatus: "draft" },
+          snapshots,
+        );
+        Object.assign(draft, document);
+        await draft.save({ session });
+        await writeAuditLog(
+          tenant,
+          "invoice_draft",
+          draft._id,
+          "update",
+          before,
+          toPlainDocument(draft),
+          session,
+        );
+        return toResponseDocument(draft);
+      }
+
+      const numbering = await consumeInvoiceNumber(
+        tenant,
+        String(snapshots.presetSnapshot.invoice_prefix || "INV"),
+        invDate,
+        session,
+      );
+      const document = buildInvoiceDocument(
+        tenant,
+        { ...invoicePayload, invDate },
+        snapshots,
+      );
+      const [invoice] = await InvoiceModel.create(
+        [
+          {
+            ...document,
+            ...numbering,
+            sourceDraftId: draft._id,
+            status: "active",
+            recordStatus: "active",
+          },
+        ],
+        { session },
+      );
+      const deleted = await InvoiceDraftModel.deleteOne({
+        _id: draft._id,
+        organizationId: tenant.organizationId,
+        __v: version,
+      }).session(session);
+      if (deleted.deletedCount !== 1) {
+        throw new ApiError(
+          409,
+          "Draft was changed elsewhere. Reload it before saving your changes.",
+        );
+      }
+      await writeAuditLog(
+        tenant,
+        "invoice",
+        invoice._id,
+        "convert_draft",
+        before,
+        toPlainDocument(invoice),
+        session,
+      );
+      return toResponseDocument(invoice);
+    });
+
+    if (!result) {
+      throw new ApiError(500, "Draft conversion did not complete");
+    }
+    return result;
+  } finally {
+    await session.endSession();
   }
-
-  const before = toPlainDocument(draft);
-  const snapshots = await resolveSnapshots(tenant, draft as SnapshotSource);
-  const invDate = payload.invDate || draft.invDate || todayLocalIso();
-
-  if (payload.workflowStatus === "draft") {
-    const document = buildInvoiceDocument(
-      tenant,
-      { ...payload, invDate, workflowStatus: "draft" },
-      snapshots,
-    );
-    Object.assign(draft, document);
-    await draft.save();
-    await writeAuditLog(
-      tenant,
-      "invoice_draft",
-      draft._id,
-      "update",
-      before,
-      toPlainDocument(draft),
-    );
-    return draft;
-  }
-
-  const numbering = await consumeInvoiceNumber(
-    tenant,
-    String(snapshots.presetSnapshot.invoice_prefix || "INV"),
-    invDate,
-  );
-  const document = buildInvoiceDocument(
-    tenant,
-    { ...payload, invDate },
-    snapshots,
-  );
-  const invoice = await InvoiceModel.create({
-    ...document,
-    ...numbering,
-    sourceDraftId: draft._id,
-    status: "active",
-    recordStatus: "active",
-  });
-  await InvoiceDraftModel.deleteOne({
-    _id: draft._id,
-    organizationId: tenant.organizationId,
-  });
-  await writeAuditLog(
-    tenant,
-    "invoice",
-    invoice._id,
-    "convert_draft",
-    before,
-    toPlainDocument(invoice),
-  );
-  return invoice;
 }
 
 export async function listInvoiceDrafts(tenant: TenantContext) {
@@ -337,6 +440,7 @@ export async function listInvoiceDrafts(tenant: TenantContext) {
     items: draft.lineItems.length,
     status: "active",
     workflowStatus: "draft" as const,
+    version: documentVersion(draft),
     createdAt: draft.createdAt,
     updatedAt: draft.updatedAt,
   }));
@@ -351,70 +455,123 @@ export async function getInvoiceDraft(tenant: TenantContext, draftId: string) {
   if (!draft) {
     throw new ApiError(404, "Draft not found");
   }
-  return draft;
+  return toResponseDocument(draft);
 }
 
 export async function deleteInvoiceDraft(
   tenant: TenantContext,
   draftId: string,
+  version: number,
 ) {
   ensureObjectId(draftId);
-  const draft = await InvoiceDraftModel.findOne({
-    _id: draftId,
-    organizationId: tenant.organizationId,
-  });
-  if (!draft) {
-    throw new ApiError(404, "Draft not found");
-  }
+  const session = await mongoose.startSession();
 
-  await InvoiceDraftModel.deleteOne({
-    _id: draft._id,
-    organizationId: tenant.organizationId,
-  });
-  await writeAuditLog(
-    tenant,
-    "invoice_draft",
-    draftId,
-    "delete",
-    toPlainDocument(draft),
-    null,
-  );
+  try {
+    await session.withTransaction(async () => {
+      const draft = await InvoiceDraftModel.findOne({
+        _id: draftId,
+        organizationId: tenant.organizationId,
+      }).session(session);
+      if (!draft) {
+        throw new ApiError(404, "Draft not found");
+      }
+      assertExpectedVersion(documentVersion(draft), version, "Draft");
+
+      const deleted = await InvoiceDraftModel.deleteOne({
+        _id: draft._id,
+        organizationId: tenant.organizationId,
+        __v: version,
+      }).session(session);
+      if (deleted.deletedCount !== 1) {
+        throw new ApiError(
+          409,
+          "Draft was changed elsewhere. Reload it before deleting it.",
+        );
+      }
+      await writeAuditLog(
+        tenant,
+        "invoice_draft",
+        draftId,
+        "delete",
+        toPlainDocument(draft),
+        null,
+        session,
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function updateInvoice(
   tenant: TenantContext,
   invNo: string,
-  payload: InvoicePayload,
+  payload: InvoiceUpdatePayload,
 ) {
-  const invoice = await InvoiceModel.findOne({
-    organizationId: tenant.organizationId,
-    invNo,
-  });
-  if (!invoice) {
-    throw new ApiError(404, "Invoice not found");
-  }
-  if (invoice.status === "cancelled") {
-    throw new ApiError(409, "Cancelled invoices cannot be edited");
+  const nextWorkflowStatus = payload.workflowStatus;
+  if (
+    nextWorkflowStatus !== "checkedIn" &&
+    nextWorkflowStatus !== "checkedOut"
+  ) {
+    throw new ApiError(
+      422,
+      "An issued invoice must be checked in or checked out",
+    );
   }
 
-  const before = toPlainDocument(invoice);
-  const snapshots = await resolveSnapshots(tenant, invoice as SnapshotSource);
-  const document = buildInvoiceDocument(
-    tenant,
-    { ...payload, invDate: invoice.invDate },
-    snapshots,
-  );
-  Object.assign(invoice, { ...document, recordStatus: invoice.status });
-  await invoice.save();
-  await writeAuditLog(
-    tenant,
-    "invoice",
-    invoice._id,
-    "update",
-    before,
-    toPlainDocument(invoice),
-  );
-  return invoice;
+  const { version, ...invoicePayload } = payload;
+  const session = await mongoose.startSession();
+
+  try {
+    const result = await session.withTransaction(async () => {
+      const invoice = await InvoiceModel.findOne({
+        organizationId: tenant.organizationId,
+        invNo,
+      }).session(session);
+      if (!invoice) {
+        throw new ApiError(404, "Invoice not found");
+      }
+      assertExpectedVersion(documentVersion(invoice), version, "Invoice");
+      assertInvoiceWorkflowTransition(
+        defaultWorkflowStatus(invoice),
+        nextWorkflowStatus,
+      );
+
+      const before = toPlainDocument(invoice);
+      const snapshots = await resolveSnapshots(
+        tenant,
+        invoice as SnapshotSource,
+      );
+      const document = buildInvoiceDocument(
+        tenant,
+        {
+          ...invoicePayload,
+          workflowStatus: nextWorkflowStatus,
+          invDate: invoice.invDate,
+        },
+        snapshots,
+      );
+      Object.assign(invoice, { ...document, recordStatus: invoice.status });
+      await invoice.save({ session });
+      await writeAuditLog(
+        tenant,
+        "invoice",
+        invoice._id,
+        "update",
+        before,
+        toPlainDocument(invoice),
+        session,
+      );
+      return toResponseDocument(invoice);
+    });
+
+    if (!result) {
+      throw new ApiError(500, "Invoice update did not complete");
+    }
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 
 function invoiceFilters(tenant: TenantContext, query: InvoiceQuery) {
@@ -475,6 +632,7 @@ export async function listInvoices(tenant: TenantContext, query: InvoiceQuery) {
       items: invoice.lineItems.length,
       status: invoice.status,
       workflowStatus: defaultWorkflowStatus(invoice),
+      version: documentVersion(invoice),
       createdAt: invoice.createdAt,
     }));
 }
@@ -557,35 +715,58 @@ export async function getInvoice(tenant: TenantContext, invNo: string) {
   }
   return {
     ...invoice,
+    version: documentVersion(invoice),
     workflowStatus: defaultWorkflowStatus(invoice),
     recordStatus: invoice.recordStatus || invoice.status,
   };
 }
 
-export async function cancelInvoice(tenant: TenantContext, invNo: string) {
-  const invoice = await InvoiceModel.findOne({
-    organizationId: tenant.organizationId,
-    invNo,
-  });
-  if (!invoice) {
-    throw new ApiError(404, "Invoice not found");
-  }
+export async function cancelInvoice(
+  tenant: TenantContext,
+  invNo: string,
+  version: number,
+) {
+  const session = await mongoose.startSession();
 
-  const before = toPlainDocument(invoice);
-  invoice.status = "cancelled";
-  invoice.recordStatus = "cancelled";
-  invoice.workflowStatus = "cancelled";
-  invoice.cancelledAt = new Date();
-  await invoice.save();
-  await writeAuditLog(
-    tenant,
-    "invoice",
-    invoice._id,
-    "cancel",
-    before,
-    toPlainDocument(invoice),
-  );
-  return invoice;
+  try {
+    const result = await session.withTransaction(async () => {
+      const invoice = await InvoiceModel.findOne({
+        organizationId: tenant.organizationId,
+        invNo,
+      }).session(session);
+      if (!invoice) {
+        throw new ApiError(404, "Invoice not found");
+      }
+      assertExpectedVersion(documentVersion(invoice), version, "Invoice");
+      if (invoice.status === "cancelled") {
+        throw new ApiError(409, "Invoice is already cancelled");
+      }
+
+      const before = toPlainDocument(invoice);
+      invoice.status = "cancelled";
+      invoice.recordStatus = "cancelled";
+      invoice.workflowStatus = "cancelled";
+      invoice.cancelledAt = new Date();
+      await invoice.save({ session });
+      await writeAuditLog(
+        tenant,
+        "invoice",
+        invoice._id,
+        "cancel",
+        before,
+        toPlainDocument(invoice),
+        session,
+      );
+      return toResponseDocument(invoice);
+    });
+
+    if (!result) {
+      throw new ApiError(500, "Invoice cancellation did not complete");
+    }
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function exportInvoicesCsv(

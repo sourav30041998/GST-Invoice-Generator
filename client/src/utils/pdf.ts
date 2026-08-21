@@ -260,7 +260,10 @@ export function buildInvoicePdf(invoice: Invoice, logoDataUrl: string | null) {
   y += 11;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
-  const amountWords = `Amount in words: Rupees ${numWords(Math.round(invoice.netTotal))} Only`;
+  const amountInWords = numWords(Math.round(invoice.netTotal));
+  const amountWords = amountInWords
+    ? `Amount in words: Rupees ${amountInWords} Only`
+    : "Amount in words: Amount exceeds the supported amount-in-words range.";
   const amountWordsWidth = summaryX - marginLeft - 6;
   const amountWordsLines = doc.splitTextToSize(amountWords, amountWordsWidth);
   amountWordsLines.forEach((line: string, index: number) => {

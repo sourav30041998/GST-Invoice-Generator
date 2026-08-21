@@ -17,15 +17,22 @@ export type RawAdjustment = {
   type?: "add" | "deduct";
 };
 
+export const MAX_INVOICE_AMOUNT = 9_999_999_999;
+
 const round2 = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
 
+const toFiniteNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 export function calculateLineItem(item: RawLineItem) {
-  const units = Number(item.units) || 0;
-  const rate = Number(item.rate) || 0;
-  const cgstRate = Number(item.cgstRate) || 0;
-  const sgstRate = Number(item.sgstRate) || 0;
-  const igstRate = Number(item.igstRate) || 0;
+  const units = toFiniteNumber(item.units);
+  const rate = toFiniteNumber(item.rate);
+  const cgstRate = toFiniteNumber(item.cgstRate);
+  const sgstRate = toFiniteNumber(item.sgstRate);
+  const igstRate = toFiniteNumber(item.igstRate);
   const taxRate = (cgstRate + sgstRate + igstRate) / 100;
   const gross = units * rate;
   const taxable =
@@ -62,7 +69,7 @@ export function calculateInvoiceTotals(
   const calculatedItems = lineItems.map(calculateLineItem);
   const calculatedAdjustments = adjustments.map((adjustment) => ({
     desc: adjustment.desc || "",
-    amount: round2(Number(adjustment.amount) || 0),
+    amount: round2(toFiniteNumber(adjustment.amount)),
     type: adjustment.type === "deduct" ? "deduct" : "add",
   }));
 

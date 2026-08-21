@@ -21,7 +21,10 @@ export type InvoiceTotals = {
 export const round2 = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
 
-const toNumber = (value: number | string | undefined) => Number(value) || 0;
+const toNumber = (value: number | string | undefined) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 export function calculateLineItem(item: LineItemInput): CalculatedLineItem {
   const units = toNumber(item.units);
@@ -112,9 +115,20 @@ export function formatCurrency(value: number | string | undefined) {
   })}`;
 }
 
-export function numWords(value: number) {
-  const n = Math.floor(Math.abs(value));
-  if (n === 0) {
+export const MAX_INVOICE_AMOUNT = 9_999_999_999;
+export const MAX_AMOUNT_IN_WORDS = MAX_INVOICE_AMOUNT;
+
+export function numWords(value: number): string | null {
+  const roundedValue = Math.round(Math.abs(value));
+  if (
+    !Number.isFinite(value) ||
+    !Number.isSafeInteger(roundedValue) ||
+    roundedValue > MAX_AMOUNT_IN_WORDS
+  ) {
+    return null;
+  }
+
+  if (roundedValue === 0) {
     return "Zero";
   }
 
@@ -165,16 +179,16 @@ export function numWords(value: number) {
     return `${ones[Math.floor(num / 100)]} Hundred${num % 100 ? ` ${underHundred(num % 100)}` : ""}`;
   };
 
-  const crore = Math.floor(n / 10000000);
-  const lakh = Math.floor((n % 10000000) / 100000);
-  const thousand = Math.floor((n % 100000) / 1000);
-  const rest = n % 1000;
-  return [
+  const crore = Math.floor(roundedValue / 10_000_000);
+  const lakh = Math.floor((roundedValue % 10_000_000) / 100_000);
+  const thousand = Math.floor((roundedValue % 100_000) / 1_000);
+  const remainder = roundedValue % 1_000;
+  const words = [
     crore ? `${underThousand(crore)} Crore` : "",
-    lakh ? `${underThousand(lakh)} Lakh` : "",
-    thousand ? `${underThousand(thousand)} Thousand` : "",
-    rest ? underThousand(rest) : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    lakh ? `${underHundred(lakh)} Lakh` : "",
+    thousand ? `${underHundred(thousand)} Thousand` : "",
+    remainder ? underThousand(remainder) : "",
+  ].filter(Boolean);
+
+  return words.join(" ");
 }

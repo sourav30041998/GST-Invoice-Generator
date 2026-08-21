@@ -60,6 +60,28 @@ All endpoints except health and authentication status require an authenticated s
 | `PUT`    | `/api/invoices/:invNo`              | Update current company invoice                                                                                |
 | `PATCH`  | `/api/invoices/:invNo/cancel`       | Cancel current company invoice                                                                                |
 
+### Invoice Integrity Rules
+
+- Invoice dates must be valid calendar dates, and departure cannot be before arrival.
+- Every charge or service must have a positive quantity and rate, plus a valid optional HSN/SAC code. Descriptions are optional.
+- A line may use either IGST or a matching CGST/SGST pair. The combined GST rate cannot exceed 100%.
+- Adjustments require a description and a positive amount. Deductions cannot reduce the payable amount to zero or below.
+- A draft can remain a draft or be issued as `checkedIn` or `checkedOut`. A checked-in invoice can remain checked in or move to checked out. Checked-out and cancelled invoices are locked; cancellation is the correction path.
+- All invoice, draft, draft-delete, and cancellation writes are executed in MongoDB transactions with their audit entry. Issuing or converting a draft also allocates the invoice number inside that transaction.
+
+### Revision-Safe Writes
+
+Invoice and draft responses contain a numeric `version`. Send that exact version in the JSON body for these requests:
+
+| Method   | Path                            | Required JSON body addition |
+| -------- | ------------------------------- | --------------------------- |
+| `PUT`    | `/api/invoices/:invNo`          | `{ "version": 0 }`          |
+| `PUT`    | `/api/invoices/drafts/:draftId` | `{ "version": 0 }`          |
+| `DELETE` | `/api/invoices/drafts/:draftId` | `{ "version": 0 }`          |
+| `PATCH`  | `/api/invoices/:invNo/cancel`   | `{ "version": 0 }`          |
+
+Replace `0` with the version from the most recent `GET`, create, or update response. A stale version receives `409 Conflict`; reload the record before retrying. This prevents a second browser or API client from overwriting a newer change.
+
 ## One-Time Legacy Migration
 
 Run this **once** before deploying this branch over a database created by the older single-company release. Take a MongoDB Atlas backup first. Do not run it concurrently with invoice writes.
