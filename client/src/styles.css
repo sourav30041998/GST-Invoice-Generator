@@ -483,6 +483,26 @@ select {
     color: var(--gold);
   }
 
+  .amount-limit-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin: -2px 0 14px;
+    border: 1px solid #e5b67a;
+    border-radius: var(--radius-sm);
+    background: #fff8ed;
+    color: #75410a;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+
+  .amount-limit-alert svg {
+    flex: 0 0 auto;
+    margin-top: 1px;
+  }
+
   .new-invoice-panel {
     display: flex;
     flex-direction: column;
@@ -1014,6 +1034,7 @@ select {
   }
 
   .table-wrap {
+    max-width: 100%;
     overflow-x: auto;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -1022,6 +1043,64 @@ select {
   .data-table {
     width: 100%;
     border-collapse: collapse;
+  }
+
+  .charges-services-table {
+    min-width: 1219px;
+    table-layout: fixed;
+  }
+
+  .charges-services-table .charge-col-description {
+    width: 192px;
+  }
+
+  .charges-services-table .charge-col-date {
+    width: 126px;
+  }
+
+  .charges-services-table .charge-col-hsn {
+    width: 90px;
+  }
+
+  .charges-services-table .charge-col-quantity {
+    width: 74px;
+  }
+
+  .charges-services-table .charge-col-rate {
+    width: 150px;
+  }
+
+  .charges-services-table .charge-col-tax {
+    width: 82px;
+  }
+
+  .charges-services-table .charge-col-amount {
+    width: 145px;
+  }
+
+  .charges-services-table .charge-col-action {
+    width: 52px;
+  }
+
+  .charges-services-table th:nth-child(11),
+  .charges-services-table td:nth-child(11) {
+    padding-right: 4px;
+    padding-left: 4px;
+    text-align: center;
+  }
+
+  .charge-heading-text {
+    text-align: left !important;
+  }
+
+  .charge-heading-number {
+    text-align: right !important;
+  }
+
+  .charge-heading-action {
+    padding-right: 4px !important;
+    padding-left: 4px !important;
+    text-align: center !important;
   }
 
   .data-table th {
@@ -1033,6 +1112,7 @@ select {
     font-weight: 700;
     letter-spacing: 0.8px;
     text-transform: uppercase;
+    vertical-align: middle;
     white-space: nowrap;
   }
 
@@ -1051,7 +1131,10 @@ select {
   }
 
   .table-input {
+    display: block;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -1068,9 +1151,18 @@ select {
   }
 
   .amount-cell {
+    overflow: hidden;
     color: var(--accent);
     font-weight: 700;
     text-align: right;
+    white-space: nowrap;
+  }
+
+  .currency-value {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
@@ -1187,6 +1279,17 @@ select {
     letter-spacing: 0;
   }
 
+  .app-dialog-validation-heading {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--danger);
+  }
+
+  .app-dialog-validation-heading .app-dialog-title {
+    color: inherit;
+  }
+
   .app-dialog-message {
     margin: 8px 0 0;
     color: var(--muted);
@@ -1248,12 +1351,25 @@ select {
   }
 
   .total-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
     align-items: center;
-    justify-content: space-between;
     gap: 16px;
     color: var(--dim);
     font-size: 13px;
+  }
+
+  .total-row > span,
+  .total-value {
+    min-width: 0;
+  }
+
+  .total-value {
+    display: block;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .total-row + .total-row {
@@ -3784,6 +3900,22 @@ select {
       animation: none;
     }
   }
+}
+
+.invoice-form-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.invoice-form-fields:disabled {
+  opacity: 0.82;
+}
+
+.invoice-lock-notice {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
 }
 
 @media (max-width: 1180px) {

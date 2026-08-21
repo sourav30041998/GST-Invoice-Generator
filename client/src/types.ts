@@ -205,6 +205,7 @@ type InvoiceRecordBase = Omit<
   deductTotal: number;
   netTotal: number;
   presetSnapshot: Preset;
+  version: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -233,6 +234,7 @@ export type InvoiceListItem = {
   items: number;
   status: InvoiceRecordStatus | InvoiceWorkflowStatus;
   workflowStatus?: InvoiceWorkflowStatus;
+  version: number;
   createdAt?: string;
 };
 
@@ -247,6 +249,7 @@ export type InvoiceDraftListItem = {
   items: number;
   status: "active";
   workflowStatus: "draft";
+  version: number;
   createdAt?: string;
   updatedAt?: string;
 };

@@ -57,8 +57,13 @@ async function request<T>(
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
       message?: string;
+      issues?: Array<{ path?: string; message?: string }>;
     } | null;
-    throw new Error(body?.message || `Request failed with ${response.status}`);
+    const firstIssue = body?.issues?.[0];
+    const detail = firstIssue?.message
+      ? `${firstIssue.path ? `${firstIssue.path}: ` : ""}${firstIssue.message}`
+      : body?.message;
+    throw new Error(detail || `Request failed with ${response.status}`);
   }
 
   if (response.status === 204) {
@@ -242,16 +247,20 @@ export const api = {
       { method: "POST", body: JSON.stringify(payload) },
       companyCsrfToken,
     ),
-  updateInvoiceDraft: (draftId: string, payload: InvoicePayload) =>
+  updateInvoiceDraft: (
+    draftId: string,
+    payload: InvoicePayload,
+    version: number,
+  ) =>
     request<InvoiceDraft | Invoice>(
       `/invoices/drafts/${encodeURIComponent(draftId)}`,
-      { method: "PUT", body: JSON.stringify(payload) },
+      { method: "PUT", body: JSON.stringify({ ...payload, version }) },
       companyCsrfToken,
     ),
-  deleteInvoiceDraft: (draftId: string) =>
+  deleteInvoiceDraft: (draftId: string, version: number) =>
     request<void>(
       `/invoices/drafts/${encodeURIComponent(draftId)}`,
-      { method: "DELETE" },
+      { method: "DELETE", body: JSON.stringify({ version }) },
       companyCsrfToken,
     ),
   createInvoice: (payload: InvoicePayload) =>
@@ -260,16 +269,16 @@ export const api = {
       { method: "POST", body: JSON.stringify(payload) },
       companyCsrfToken,
     ),
-  updateInvoice: (invNo: string, payload: InvoicePayload) =>
+  updateInvoice: (invNo: string, payload: InvoicePayload, version: number) =>
     request<Invoice>(
       `/invoices/${encodeURIComponent(invNo)}`,
-      { method: "PUT", body: JSON.stringify(payload) },
+      { method: "PUT", body: JSON.stringify({ ...payload, version }) },
       companyCsrfToken,
     ),
-  cancelInvoice: (invNo: string) =>
+  cancelInvoice: (invNo: string, version: number) =>
     request<Invoice>(
       `/invoices/${encodeURIComponent(invNo)}/cancel`,
-      { method: "PATCH" },
+      { method: "PATCH", body: JSON.stringify({ version }) },
       companyCsrfToken,
     ),
   exportCsvUrl: (filters: InvoiceFilters) =>

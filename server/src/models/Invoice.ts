@@ -106,11 +106,18 @@ const invoiceSchema = new Schema(
     createdBy: { type: String, default: "system", trim: true },
     createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
   },
-  { timestamps: true, minimize: false },
+  { timestamps: true, minimize: false, optimisticConcurrency: true },
 );
 
 invoiceSchema.index({ organizationId: 1, invNo: 1 }, { unique: true });
 invoiceSchema.index({ organizationId: 1, invDate: -1 });
+invoiceSchema.index(
+  { organizationId: 1, sourceDraftId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { sourceDraftId: { $type: "objectId" } },
+  },
+);
 invoiceSchema.index(
   { organizationId: 1, invoicePrefix: 1, invoiceMonth: 1, sequenceNo: 1 },
   {

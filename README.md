@@ -27,7 +27,7 @@ Backend runs on `http://localhost:5050`.
 
 ## Core Workflows
 
-- Create GST invoices with line-item tax presets, adjustments, amount-in-words, and PDF download.
+- Create GST invoices with charge and service tax presets, adjustments, amount-in-words, and PDF download.
 - Create a company owner account, then maintain that company's business profile and invoices.
 - Store invoices, preset settings, logo data, counters, drafts, sessions, and cancellation state in MongoDB.
 - Browse invoice history, filter by date, GST status, status, or search term.

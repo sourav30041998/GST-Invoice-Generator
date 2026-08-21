@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   BedDouble,
   CalendarDays,
@@ -10,7 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { emptyLineItem, invoiceCustomTaxPreset } from "../constants";
 import { findIndianState, indianStates } from "../data/indianStates";
@@ -30,9 +31,11 @@ import type {
 import {
   calculateInvoiceTotals,
   formatCurrency,
+  MAX_INVOICE_AMOUNT,
   numWords,
 } from "../utils/calculations";
 import { todayIso } from "../utils/dates";
+import { validateInvoiceForm } from "../utils/invoiceValidation";
 
 type FormState = Omit<
   InvoicePayload,
@@ -42,6 +45,18 @@ type FormState = Omit<
 };
 
 type InvoiceFormTab = "details" | "items";
+
+type FieldLimitField = {
+  id: string;
+  type:
+    | "rate"
+    | "adjustment"
+    | "units"
+    | "hsn"
+    | "cgstRate"
+    | "sgstRate"
+    | "igstRate";
+};
 
 type InvoiceFormProps = {
   nextInvoiceNo: string;
@@ -100,6 +115,20 @@ function RequiredLabel({ children }: { children: string }) {
       {children} <span className="required-star">*</span>
     </label>
   );
+}
+
+function SummaryAmount({ value }: { value: number }) {
+  const formattedValue = formatCurrency(value);
+  return (
+    <strong className="total-value" title={formattedValue}>
+      {formattedValue}
+    </strong>
+  );
+}
+
+function exceedsNumberLimit(value: number | string, limit: number) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > limit;
 }
 
 const canUseInclusive = (taxPresets: TaxPreset[], presetKey: string) =>
@@ -183,6 +212,7 @@ export function InvoiceForm({
   );
   const [adjustments, setAdjustments] = useState<AdjustmentInput[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftVersion, setDraftVersion] = useState<number | null>(null);
   const [statusVisible, setStatusVisible] = useState(
     Boolean(editingInvoice || activeDraft),
   );
@@ -191,6 +221,12 @@ export function InvoiceForm({
   );
   const [activeTab, setActiveTab] = useState<InvoiceFormTab>("details");
   const [backConfirmOpen, setBackConfirmOpen] = useState(false);
+  const [validationDialogMessage, setValidationDialogMessage] = useState<
+    string | null
+  >(null);
+  const [fieldLimitField, setFieldLimitField] =
+    useState<FieldLimitField | null>(null);
+  const tabToRestoreAfterSaveRef = useRef<InvoiceFormTab | null>(null);
   const [stateOptions, setStateOptions] =
     useState<readonly string[]>(indianStates);
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
@@ -203,15 +239,32 @@ export function InvoiceForm({
     () => calculateInvoiceTotals(lineItems, adjustments),
     [lineItems, adjustments],
   );
+  const netTotalWords = numWords(Math.round(totals.netTotal));
+  const fieldLimitMessage = fieldLimitField
+    ? {
+        rate: "A rate cannot exceed Rs. 9,999,999,999.00. The extra value was not accepted.",
+        adjustment:
+          "An adjustment amount cannot exceed Rs. 9,999,999,999.00. The extra value was not accepted.",
+        units: "Quantity cannot exceed 999. The extra value was not accepted.",
+        hsn: "HSN/SAC is limited to six digits. The extra digit was not accepted.",
+        cgstRate: "CGST cannot exceed 100%. The extra value was not accepted.",
+        sgstRate: "SGST cannot exceed 100%. The extra value was not accepted.",
+        igstRate: "IGST cannot exceed 100%. The extra value was not accepted.",
+      }[fieldLimitField.type]
+    : null;
 
   const resetInvoiceForm = useCallback(() => {
     setForm(initialForm());
     setLineItems(initialLineItems(taxPresets));
     setAdjustments([]);
     setDraftId(null);
+    setDraftVersion(null);
     setStatusVisible(false);
     setLastSavedSnapshot(null);
     setActiveTab("details");
+    setValidationDialogMessage(null);
+    setFieldLimitField(null);
+    tabToRestoreAfterSaveRef.current = null;
   }, [taxPresets]);
 
   useEffect(() => {
@@ -279,6 +332,26 @@ export function InvoiceForm({
   }, [editingInvoice?._id, form.checkinDate, form.checkoutDate]);
 
   useEffect(() => {
+    if (!fieldLimitField) {
+      return;
+    }
+
+    const fieldStillExists =
+      fieldLimitField.type === "adjustment"
+        ? adjustments.some((item) => item.id === fieldLimitField.id)
+        : lineItems.some((item) => item.id === fieldLimitField.id);
+    if (!fieldStillExists) {
+      setFieldLimitField(null);
+    }
+  }, [adjustments, fieldLimitField, lineItems]);
+
+  useEffect(() => {
+    const restoreTabAfterSave = () => {
+      const tabToRestore = tabToRestoreAfterSaveRef.current;
+      tabToRestoreAfterSaveRef.current = null;
+      setActiveTab(tabToRestore || "details");
+    };
+
     if (editingInvoice) {
       const nextForm: FormState = {
         invDate: editingInvoice.invDate,
@@ -306,13 +379,14 @@ export function InvoiceForm({
 
       setForm(nextForm);
       setDraftId(null);
+      setDraftVersion(null);
       setStatusVisible(true);
       setLineItems(nextLineItems);
       setAdjustments(nextAdjustments);
       setLastSavedSnapshot(
         formSnapshot(nextForm, nextLineItems, nextAdjustments),
       );
-      setActiveTab("details");
+      restoreTabAfterSave();
       return;
     }
 
@@ -343,13 +417,14 @@ export function InvoiceForm({
 
       setForm(nextForm);
       setDraftId(activeDraft._id);
+      setDraftVersion(activeDraft.version);
       setStatusVisible(true);
       setLineItems(nextLineItems);
       setAdjustments(nextAdjustments);
       setLastSavedSnapshot(
         formSnapshot(nextForm, nextLineItems, nextAdjustments),
       );
-      setActiveTab("details");
+      restoreTabAfterSave();
       return;
     }
 
@@ -461,6 +536,21 @@ export function InvoiceForm({
       roomType: knownRooms.get(room.roomId)?.roomType || "",
     }));
   }, [activeDraft?.rooms, availableRooms, editingInvoice?.rooms, form.rooms]);
+  const editingWorkflowStatus =
+    editingInvoice?.workflowStatus ||
+    (editingInvoice?.status === "cancelled" ? "cancelled" : "checkedOut");
+  const invoiceLocked = Boolean(
+    editingInvoice &&
+      editingWorkflowStatus !== "reserved" &&
+      editingWorkflowStatus !== "checkedIn",
+  );
+  const workflowOptions: InvoiceWorkflowStatus[] = editingInvoice
+    ? editingWorkflowStatus === "reserved"
+      ? ["reserved", "checkedIn"]
+      : editingWorkflowStatus === "checkedIn"
+        ? ["checkedIn", "checkedOut"]
+        : [editingWorkflowStatus]
+    : ["draft", "reserved", "checkedIn", "checkedOut"];
 
   useEffect(() => {
     onHeaderStateChange({
@@ -470,8 +560,16 @@ export function InvoiceForm({
     });
   }, [form.workflowStatus, invoiceNumberText, onHeaderStateChange, saveState]);
   const submit = async (closeAfterSave: boolean) => {
+    if (invoiceLocked) {
+      setValidationDialogMessage(
+        "This invoice is locked. Cancel it and issue a corrected invoice instead.",
+      );
+      return;
+    }
+
     const effectiveStatus = statusVisible ? form.workflowStatus : "draft";
     const requiredValues = [
+      ["Invoice Date", form.invDate],
       ["Arrival", form.checkinDate],
       ["Departure", form.checkoutDate],
       ["Rooms", form.rooms.length],
@@ -485,16 +583,41 @@ export function InvoiceForm({
 
     if (missingFields.length) {
       setActiveTab("details");
-      showToast(`Please fill required fields: ${missingFields.join(", ")}.`);
+      setValidationDialogMessage(
+        `Please fill required fields: ${missingFields.join(", ")}.`,
+      );
       return;
     }
 
     const selectedState = findIndianState(form.partyState, stateOptions);
     if (!selectedState) {
       setActiveTab("details");
-      showToast("Please select a valid Indian state.");
+      setValidationDialogMessage("Please select a valid Indian state.");
       return;
     }
+
+    const validationIssue = validateInvoiceForm(form, lineItems, adjustments);
+    if (validationIssue) {
+      setActiveTab(validationIssue.tab);
+      setValidationDialogMessage(validationIssue.message);
+      return;
+    }
+
+    if (draftId && draftVersion === null) {
+      setValidationDialogMessage(
+        "Draft revision is unavailable. Reload the draft before saving it.",
+      );
+      return;
+    }
+
+    const currentDraftVersion = () => {
+      if (draftVersion === null) {
+        throw new Error(
+          "Draft revision is unavailable. Reload the draft before saving it.",
+        );
+      }
+      return draftVersion;
+    };
 
     setSaving(true);
     try {
@@ -506,10 +629,15 @@ export function InvoiceForm({
 
       if (!editingInvoice && effectiveStatus === "draft") {
         const draft = draftId
-          ? await api.updateInvoiceDraft(draftId, payload)
+          ? await api.updateInvoiceDraft(
+              draftId,
+              payload,
+              currentDraftVersion(),
+            )
           : await api.createInvoiceDraft(payload);
         const savedDraft = draft as InvoiceDraft;
         setDraftId(savedDraft._id);
+        setDraftVersion(savedDraft.version);
         setStatusVisible(true);
         setLastSavedSnapshot(currentSnapshot);
         onDraftSaved(closeAfterSave);
@@ -518,23 +646,33 @@ export function InvoiceForm({
       }
 
       const savedInvoice = editingInvoice
-        ? await api.updateInvoice(editingInvoice.invNo, payload)
+        ? await api.updateInvoice(
+            editingInvoice.invNo,
+            payload,
+            editingInvoice.version,
+          )
         : draftId
-          ? await api.updateInvoiceDraft(draftId, payload)
+          ? await api.updateInvoiceDraft(
+              draftId,
+              payload,
+              currentDraftVersion(),
+            )
           : await api.createInvoice(payload);
       const savedInvoiceWithStatus: Invoice = {
         ...(savedInvoice as Invoice),
         workflowStatus: effectiveStatus,
       };
       setDraftId(null);
+      setDraftVersion(null);
       setStatusVisible(true);
       setLastSavedSnapshot(currentSnapshot);
+      tabToRestoreAfterSaveRef.current = activeTab;
       onSaved(savedInvoiceWithStatus, closeAfterSave);
       showToast(
         `Invoice ${savedInvoiceWithStatus.invNo} ${editingInvoice ? "updated" : "saved"}.`,
       );
     } catch (error) {
-      showToast(
+      setValidationDialogMessage(
         error instanceof Error ? error.message : "Could not save invoice.",
       );
     } finally {
@@ -563,6 +701,7 @@ export function InvoiceForm({
           className="btn btn-outline invoice-back-button"
           type="button"
           onClick={handleBack}
+          disabled={Boolean(validationDialogMessage)}
         >
           <ArrowLeft size={16} />
           Back
@@ -578,6 +717,7 @@ export function InvoiceForm({
             role="tab"
             aria-selected={activeTab === "details"}
             onClick={() => setActiveTab("details")}
+            disabled={Boolean(validationDialogMessage)}
           >
             <FileText size={16} />
             <span>Invoice & Customer</span>
@@ -588,14 +728,19 @@ export function InvoiceForm({
             role="tab"
             aria-selected={activeTab === "items"}
             onClick={() => setActiveTab("items")}
+            disabled={Boolean(validationDialogMessage)}
           >
             <ListChecks size={16} />
-            <span>Line Items</span>
+            <span>Charges & Services</span>
             <strong>{lineItems.length}</strong>
           </button>
         </div>
       </div>
 
+      <fieldset
+        className="invoice-form-fields"
+        disabled={invoiceLocked || Boolean(validationDialogMessage)}
+      >
       {activeTab === "details" ? (
         <>
           <section className="panel">
@@ -609,7 +754,7 @@ export function InvoiceForm({
                 <div className="readonly-box">{invoiceNumberText}</div>
               </div>
               <div className="field">
-                <label>Invoice Date</label>
+                <RequiredLabel>Invoice Date</RequiredLabel>
                 <input
                   className="input"
                   type="date"
@@ -625,6 +770,7 @@ export function InvoiceForm({
                   className="input"
                   type="date"
                   value={form.checkinDate}
+                  max={form.checkoutDate || undefined}
                   onChange={(event) =>
                     updateForm("checkinDate", event.target.value)
                   }
@@ -637,6 +783,7 @@ export function InvoiceForm({
                   className="input"
                   type="date"
                   value={form.checkoutDate}
+                  min={form.checkinDate || undefined}
                   onChange={(event) =>
                     updateForm("checkoutDate", event.target.value)
                   }
@@ -754,13 +901,19 @@ export function InvoiceForm({
                     }
                     required
                   >
-                    {form.workflowStatus === "cancelled" ? (
-                      <option value="cancelled">Cancelled</option>
-                    ) : null}
-                    <option value="draft">Draft</option>
-                    <option value="reserved">Reserved</option>
-                    <option value="checkedIn">Checked In</option>
-                    <option value="checkedOut">Checked Out</option>
+                    {workflowOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status === "draft"
+                          ? "Draft"
+                          : status === "reserved"
+                            ? "Reserved"
+                            : status === "checkedIn"
+                              ? "Checked In"
+                              : status === "checkedOut"
+                                ? "Checked Out"
+                                : "Cancelled"}
+                      </option>
+                    ))}
                   </select>
                 </div>
               ) : null}
@@ -834,29 +987,52 @@ export function InvoiceForm({
         <>
           <section className="panel">
             <div className="panel-title row-title">
-              <span>Line Items</span>
-              <span>GST applied per line item based on preset</span>
+              <span>Charges & Services</span>
+              <span>GST applied to each charge or service based on preset</span>
             </div>
+            {fieldLimitMessage ? (
+              <div className="amount-limit-alert" role="alert">
+                <AlertTriangle size={17} aria-hidden="true" />
+                <span>{fieldLimitMessage}</span>
+              </div>
+            ) : null}
             <div className="table-wrap">
-              <table className="data-table min-w-[1060px]">
+              <table className="data-table charges-services-table">
+                <colgroup>
+                  <col className="charge-col-description" />
+                  <col className="charge-col-date" />
+                  <col className="charge-col-hsn" />
+                  <col className="charge-col-quantity" />
+                  <col className="charge-col-rate" />
+                  <col className="charge-col-tax" />
+                  <col className="charge-col-tax" />
+                  <col className="charge-col-tax" />
+                  <col className="charge-col-amount" />
+                  <col className="charge-col-amount" />
+                  <col className="charge-col-action" />
+                </colgroup>
                 <thead>
                   <tr>
-                    <th>Preset / Description</th>
-                    <th>Date</th>
-                    <th>HSN</th>
-                    <th className="text-right">Qty</th>
-                    <th className="text-right">Rate</th>
-                    <th className="text-right">CGST%</th>
-                    <th className="text-right">SGST%</th>
-                    <th className="text-right">IGST%</th>
-                    <th className="text-right">Taxable</th>
-                    <th className="text-right">Total</th>
-                    <th></th>
+                    <th className="charge-heading-text">Preset / Description</th>
+                    <th className="charge-heading-text">Date</th>
+                    <th className="charge-heading-text">HSN</th>
+                    <th className="charge-heading-number">Qty</th>
+                    <th className="charge-heading-number">Rate</th>
+                    <th className="charge-heading-number">CGST%</th>
+                    <th className="charge-heading-number">SGST%</th>
+                    <th className="charge-heading-number">IGST%</th>
+                    <th className="charge-heading-number">Taxable</th>
+                    <th className="charge-heading-number">Total</th>
+                    <th className="charge-heading-action"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {lineItems.map((line, index) => {
                     const calculated = totals.lineItems[index];
+                    const taxableAmount = formatCurrency(
+                      calculated?.taxable || 0,
+                    );
+                    const totalAmount = formatCurrency(calculated?.total || 0);
                     const currentPresetAvailable =
                       line.presetKey === invoiceCustomTaxPreset.key ||
                       taxPresets.some(
@@ -925,33 +1101,72 @@ export function InvoiceForm({
                           <input
                             className="table-input"
                             value={line.hsn}
-                            onChange={(event) =>
-                              updateLine(line.id, { hsn: event.target.value })
-                            }
+                            inputMode="numeric"
+                            onChange={(event) => {
+                              const nextHsn = event.target.value.replace(
+                                /\D/g,
+                                "",
+                              );
+                              if (nextHsn.length > 6) {
+                                setFieldLimitField({ id: line.id, type: "hsn" });
+                                return;
+                              }
+                              if (
+                                fieldLimitField?.id === line.id &&
+                                fieldLimitField.type === "hsn"
+                              ) {
+                                setFieldLimitField(null);
+                              }
+                              updateLine(line.id, { hsn: nextHsn });
+                            }}
                           />
                         </td>
                         <td>
                           <input
                             className="table-input text-right"
                             type="number"
-                            min="0"
-                            step="0.01"
+                            min="0.001"
+                            max="999"
+                            step="0.001"
                             value={line.units}
-                            onChange={(event) =>
-                              updateLine(line.id, { units: event.target.value })
-                            }
+                            onChange={(event) => {
+                              const nextUnits = event.target.value;
+                              if (exceedsNumberLimit(nextUnits, 999)) {
+                                setFieldLimitField({ id: line.id, type: "units" });
+                                return;
+                              }
+                              if (
+                                fieldLimitField?.id === line.id &&
+                                fieldLimitField.type === "units"
+                              ) {
+                                setFieldLimitField(null);
+                              }
+                              updateLine(line.id, { units: nextUnits });
+                            }}
                           />
                         </td>
                         <td>
                           <input
                             className="table-input text-right"
                             type="number"
-                            min="0"
+                            min="0.01"
+                            max={MAX_INVOICE_AMOUNT}
                             step="0.01"
                             value={line.rate}
-                            onChange={(event) =>
-                              updateLine(line.id, { rate: event.target.value })
-                            }
+                            onChange={(event) => {
+                              const nextRate = event.target.value;
+                              if (exceedsNumberLimit(nextRate, MAX_INVOICE_AMOUNT)) {
+                                setFieldLimitField({ id: line.id, type: "rate" });
+                                return;
+                              }
+                              if (
+                                fieldLimitField?.id === line.id &&
+                                fieldLimitField.type === "rate"
+                              ) {
+                                setFieldLimitField(null);
+                              }
+                              updateLine(line.id, { rate: nextRate });
+                            }}
                           />
                         </td>
                         <td>
@@ -960,13 +1175,19 @@ export function InvoiceForm({
                             type="number"
                             min="0"
                             max="100"
-                            step="0.5"
+                            step="0.01"
                             value={line.cgstRate}
-                            onChange={(event) =>
-                              updateLine(line.id, {
-                                cgstRate: Number(event.target.value) || 0,
-                              })
-                            }
+                            onChange={(event) => {
+                              const nextRate = event.target.value;
+                              if (exceedsNumberLimit(nextRate, 100)) {
+                                setFieldLimitField({ id: line.id, type: "cgstRate" });
+                                return;
+                              }
+                              if (fieldLimitField?.id === line.id && fieldLimitField.type === "cgstRate") {
+                                setFieldLimitField(null);
+                              }
+                              updateLine(line.id, { cgstRate: Number(nextRate) || 0 });
+                            }}
                           />
                         </td>
                         <td>
@@ -975,13 +1196,19 @@ export function InvoiceForm({
                             type="number"
                             min="0"
                             max="100"
-                            step="0.5"
+                            step="0.01"
                             value={line.sgstRate}
-                            onChange={(event) =>
-                              updateLine(line.id, {
-                                sgstRate: Number(event.target.value) || 0,
-                              })
-                            }
+                            onChange={(event) => {
+                              const nextRate = event.target.value;
+                              if (exceedsNumberLimit(nextRate, 100)) {
+                                setFieldLimitField({ id: line.id, type: "sgstRate" });
+                                return;
+                              }
+                              if (fieldLimitField?.id === line.id && fieldLimitField.type === "sgstRate") {
+                                setFieldLimitField(null);
+                              }
+                              updateLine(line.id, { sgstRate: Number(nextRate) || 0 });
+                            }}
                           />
                         </td>
                         <td>
@@ -990,20 +1217,26 @@ export function InvoiceForm({
                             type="number"
                             min="0"
                             max="100"
-                            step="0.5"
+                            step="0.01"
                             value={line.igstRate}
-                            onChange={(event) =>
-                              updateLine(line.id, {
-                                igstRate: Number(event.target.value) || 0,
-                              })
-                            }
+                            onChange={(event) => {
+                              const nextRate = event.target.value;
+                              if (exceedsNumberLimit(nextRate, 100)) {
+                                setFieldLimitField({ id: line.id, type: "igstRate" });
+                                return;
+                              }
+                              if (fieldLimitField?.id === line.id && fieldLimitField.type === "igstRate") {
+                                setFieldLimitField(null);
+                              }
+                              updateLine(line.id, { igstRate: Number(nextRate) || 0 });
+                            }}
                           />
                         </td>
-                        <td className="amount-cell">
-                          {formatCurrency(calculated?.taxable || 0)}
+                        <td className="amount-cell" title={taxableAmount}>
+                          <span>{taxableAmount}</span>
                         </td>
-                        <td className="amount-cell">
-                          {formatCurrency(calculated?.total || 0)}
+                        <td className="amount-cell" title={totalAmount}>
+                          <span>{totalAmount}</span>
                         </td>
                         <td>
                           <button
@@ -1084,13 +1317,33 @@ export function InvoiceForm({
                             className="table-input text-right"
                             type="number"
                             min="0"
+                            max={MAX_INVOICE_AMOUNT}
                             step="0.01"
                             value={adjustment.amount}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const nextAmount = event.target.value;
+                              if (
+                                exceedsNumberLimit(
+                                  nextAmount,
+                                  MAX_INVOICE_AMOUNT,
+                                )
+                              ) {
+                                setFieldLimitField({
+                                  id: adjustment.id,
+                                  type: "adjustment",
+                                });
+                                return;
+                              }
+                              if (
+                                fieldLimitField?.id === adjustment.id &&
+                                fieldLimitField.type === "adjustment"
+                              ) {
+                                setFieldLimitField(null);
+                              }
                               updateAdjustment(adjustment.id, {
-                                amount: event.target.value,
-                              })
-                            }
+                                amount: nextAmount,
+                              });
+                            }}
                           />
                         </td>
                         <td>
@@ -1136,54 +1389,53 @@ export function InvoiceForm({
             <div className="totals-panel">
               <div className="total-row">
                 <span>Taxable Value</span>
-                <strong>{formatCurrency(totals.totalTaxable)}</strong>
+                <SummaryAmount value={totals.totalTaxable} />
               </div>
               <div className="total-row">
                 <span>CGST</span>
-                <strong>{formatCurrency(totals.totalCGST)}</strong>
+                <SummaryAmount value={totals.totalCGST} />
               </div>
               <div className="total-row">
                 <span>SGST</span>
-                <strong>{formatCurrency(totals.totalSGST)}</strong>
+                <SummaryAmount value={totals.totalSGST} />
               </div>
               <div className="total-row">
                 <span>IGST</span>
-                <strong>{formatCurrency(totals.totalIGST)}</strong>
+                <SummaryAmount value={totals.totalIGST} />
               </div>
               <div className="total-row grand">
                 <span>Grand Total</span>
-                <strong>{formatCurrency(totals.grandTotal)}</strong>
+                <SummaryAmount value={totals.grandTotal} />
               </div>
               <div className="total-row add">
                 <span>Additions</span>
-                <strong>{formatCurrency(totals.addTotal)}</strong>
+                <SummaryAmount value={totals.addTotal} />
               </div>
               <div className="total-row deduct">
                 <span>Deductions</span>
-                <strong>{formatCurrency(totals.deductTotal)}</strong>
+                <SummaryAmount value={totals.deductTotal} />
               </div>
               <div className="total-row net">
                 <span>Net Total</span>
-                <strong>{formatCurrency(totals.netTotal)}</strong>
+                <SummaryAmount value={totals.netTotal} />
               </div>
               <div className="words">
                 Rupees{" "}
-                {totals.netTotal > 0
-                  ? numWords(Math.round(totals.netTotal))
-                  : "Zero"}{" "}
+                {totals.netTotal > 0 ? netTotalWords : "Zero"}{" "}
                 Only
               </div>
             </div>
           </section>
         </>
       ) : null}
+      </fieldset>
 
       <div className="action-bar">
         <button
           className="btn btn-outline"
           type="button"
           onClick={() => void submit(false)}
-          disabled={saving}
+          disabled={saving || invoiceLocked || Boolean(validationDialogMessage)}
         >
           <Save size={16} />
           {saving ? "Saving..." : "Save"}
@@ -1192,12 +1444,49 @@ export function InvoiceForm({
           className="btn btn-primary"
           type="button"
           onClick={() => void submit(true)}
-          disabled={saving}
+          disabled={saving || invoiceLocked || Boolean(validationDialogMessage)}
         >
           <X size={16} />
           {saving ? "Saving..." : "Save & Close"}
         </button>
       </div>
+      {validationDialogMessage ? (
+        <div className="app-dialog-backdrop validation-dialog-backdrop">
+          <div
+            className="app-dialog validation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="invoice-validation-dialog-title"
+            aria-describedby="invoice-validation-dialog-message"
+          >
+            <div className="validation-dialog-icon" aria-hidden="true">
+              <AlertTriangle size={22} />
+            </div>
+            <h2
+              className="app-dialog-title"
+              id="invoice-validation-dialog-title"
+            >
+              Check invoice details
+            </h2>
+            <p
+              className="app-dialog-message"
+              id="invoice-validation-dialog-message"
+            >
+              {validationDialogMessage}
+            </p>
+            <div className="app-dialog-actions">
+              <button
+                className="btn btn-primary"
+                type="button"
+                autoFocus
+                onClick={() => setValidationDialogMessage(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {backConfirmOpen ? (
         <div
           className="app-dialog-backdrop"
