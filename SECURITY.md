@@ -10,7 +10,10 @@ This repository contains the Company invoicing service only. Platform administra
 - Passwords use `scrypt`; strict validation and rate limits protect login and invitation acceptance.
 - JSON request bodies are size-limited. API responses are `no-store`; Helmet, CORS allowlists, compression, and production trust-proxy settings are applied centrally.
 - Invitation tokens are high entropy, one-time, expiring values. MongoDB stores only an HMAC hash using `INVITATION_TOKEN_SECRET`.
-- The company service has no platform-admin routes. Its three internal Admin operations require a short-lived HMAC signature and reject browser-originated calls.
+- The company service has no platform-admin routes. Its three internal Admin
+  operations require a version 2 HMAC signature that binds the method, exact
+  path, timestamp, random nonce, and body digest. Browser-originated, stale,
+  modified, and replayed calls are rejected.
 - Organization suspension is enforced during authentication as well as session revocation, so a suspended company cannot keep using an existing session.
 - Room inventory and allocation requests derive the organization from the authenticated session. The browser cannot supply an organization ID, invent a room identifier, or bypass an availability check.
 - Room names use a restrictive business-code format, are normalized before a tenant-scoped unique index is applied, and are rendered by React as text rather than HTML.
@@ -41,11 +44,13 @@ Use an Atlas user with access only to the Company collections listed in `MULTI_T
 1. Confirm the Company health endpoint returns `200` over HTTPS.
 2. Confirm `/api/platform/overview` returns `404`.
 3. Confirm an unauthenticated Company data request returns `401` and an unsigned `/api/internal/*` request returns `403`.
-4. Confirm cross-origin unsafe requests are rejected and production cookies are `Secure`, `HttpOnly`, and host-only.
-5. Confirm an organization cannot read another organization's invoice by guessing its invoice number or MongoDB ID.
-6. Back up Atlas, test a restore, and set log/availability alerts before processing production invoices.
-7. Verify that a room ID belonging to Company A returns `422` when submitted to Company B, and that two simultaneous reservations for the same room/date range produce one success and one `409` conflict.
-8. Verify a cancelled invoice releases its room allocation and a checked-out invoice can no longer be edited.
+4. Confirm a valid signed internal request succeeds once and receives `403`
+   when the exact request is replayed.
+5. Confirm cross-origin unsafe requests are rejected and production cookies are `Secure`, `HttpOnly`, and host-only.
+6. Confirm an organization cannot read another organization's invoice by guessing its invoice number or MongoDB ID.
+7. Back up Atlas, test a restore, and set log/availability alerts before processing production invoices.
+8. Verify that a room ID belonging to Company A returns `422` when submitted to Company B, and that two simultaneous reservations for the same room/date range produce one success and one `409` conflict.
+9. Verify a cancelled invoice releases its room allocation and a checked-out invoice can no longer be edited.
 
 For the full cross-service boundary and Platform Admin controls, use the `SECURITY_BOUNDARY.md` in the separate Platform Admin repository.
 

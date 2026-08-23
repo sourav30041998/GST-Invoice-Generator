@@ -5,6 +5,7 @@ import { BusinessProfileModel } from "../models/BusinessProfile.js";
 import { CounterModel } from "../models/Counter.js";
 import { InvoiceDraftModel } from "../models/InvoiceDraft.js";
 import { InvoiceModel } from "../models/Invoice.js";
+import { InternalRequestNonceModel } from "../models/InternalRequestNonce.js";
 import { OrganizationModel } from "../models/Organization.js";
 import { OrganizationInvitationModel } from "../models/OrganizationInvitation.js";
 import { ReferenceDataModel } from "../models/ReferenceData.js";
@@ -21,6 +22,7 @@ const models = [
   CounterModel,
   InvoiceDraftModel,
   InvoiceModel,
+  InternalRequestNonceModel,
   OrganizationModel,
   OrganizationInvitationModel,
   ReferenceDataModel,

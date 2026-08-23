@@ -24,8 +24,9 @@ Protected write requests also require the per-session `X-CSRF-Token`. Production
 | `auditlogs`        | Company-local activity history                                           | Required `organizationId`, actor ID                              |
 | `referencedata`    | Shared non-sensitive lookup data, such as Indian states                  | No tenant data                                                   |
 | `schemamigrations` | One-time database migration markers                                      | Global operational metadata                                      |
+| `internalrequestnonces` | Short-lived hashes used to reject replayed Admin service requests  | Global security metadata                                          |
 
-Important indexes include unique `(organizationId, invNo)` for invoices, unique `(organizationId, prefix, period)` for counters, a unique global user email, and a TTL expiry index for sessions.
+Important indexes include unique `(organizationId, invNo)` for invoices, unique `(organizationId, prefix, period)` for counters, a unique global user email, and TTL expiry indexes for sessions and internal-request nonces.
 
 Indexes are intentionally created only by `npm run db:create-indexes` or the migration script; the running application never modifies database indexes automatically.
 

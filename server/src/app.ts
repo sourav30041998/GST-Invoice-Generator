@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import compression from "compression";
 import cors from "cors";
 import express from "express";
+import type { Request } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -70,7 +71,18 @@ app.use(
   }),
 );
 app.use(compression());
-app.use(express.json({ limit: env.REQUEST_BODY_LIMIT, strict: true }));
+app.use(
+  express.json({
+    limit: env.REQUEST_BODY_LIMIT,
+    strict: true,
+    verify(req, _res, buffer) {
+      const request = req as Request & { rawBody?: Buffer };
+      if (request.originalUrl.startsWith("/api/internal")) {
+        request.rawBody = Buffer.from(buffer);
+      }
+    },
+  }),
+);
 app.use("/api", noStoreApiResponses);
 app.use(
   morgan(
