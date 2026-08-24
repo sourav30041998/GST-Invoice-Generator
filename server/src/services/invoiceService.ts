@@ -32,11 +32,7 @@ export type TenantContext = {
 };
 
 type PersistedWorkflowStatus =
-  | "draft"
-  | "reserved"
-  | "checkedIn"
-  | "checkedOut"
-  | "cancelled";
+  "draft" | "reserved" | "checkedIn" | "checkedOut" | "cancelled";
 type InvoiceWorkbenchStatus = "all" | PersistedWorkflowStatus;
 
 type PresetSnapshot = {
@@ -299,7 +295,8 @@ export async function createInvoice(
         rooms,
         checkinDate: createdInvoice.checkinDate,
         checkoutDate: createdInvoice.checkoutDate,
-        workflowStatus: createdInvoice.workflowStatus as "reserved" | "checkedIn" | "checkedOut",
+        workflowStatus: createdInvoice.workflowStatus as
+          "reserved" | "checkedIn" | "checkedOut",
       },
       session,
     );
@@ -438,9 +435,7 @@ export async function updateInvoiceDraft(
           checkinDate: invoice.checkinDate,
           checkoutDate: invoice.checkoutDate,
           workflowStatus: invoice.workflowStatus as
-            | "reserved"
-            | "checkedIn"
-            | "checkedOut",
+            "reserved" | "checkedIn" | "checkedOut",
         },
         session,
       );

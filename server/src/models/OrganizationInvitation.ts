@@ -25,12 +25,13 @@ const organizationInvitationSchema = new Schema(
     revokedAt: { type: Date },
     emailDeliveryStatus: {
       type: String,
-      enum: ["pending", "sent", "failed"],
+      enum: ["pending", "sending", "sent", "failed"],
       default: "pending",
       required: true,
     },
     emailLastAttemptAt: { type: Date },
     emailSentAt: { type: Date },
+    emailDeliveryLeaseUntil: { type: Date, select: false },
     acceptedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
     issuedByPlatformAdminId: {
       type: Schema.Types.ObjectId,
@@ -45,6 +46,17 @@ const organizationInvitationSchema = new Schema(
 organizationInvitationSchema.index({ organizationId: 1, createdAt: -1 });
 organizationInvitationSchema.index({ email: 1, acceptedAt: 1, revokedAt: 1 });
 organizationInvitationSchema.index({ createdAt: -1, _id: -1 });
+organizationInvitationSchema.index(
+  { email: 1 },
+  {
+    name: "unique_open_invitation_per_email",
+    unique: true,
+    partialFilterExpression: {
+      acceptedAt: { $exists: false },
+      revokedAt: { $exists: false },
+    },
+  },
+);
 
 export const OrganizationInvitationModel = model(
   "OrganizationInvitation",

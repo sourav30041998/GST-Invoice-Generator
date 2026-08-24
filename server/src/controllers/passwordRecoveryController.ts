@@ -51,9 +51,7 @@ export const requestPasswordRecovery: RequestHandler = async (
       recoveryRecipientMatchesRequest(values.email, delivery.recipientEmail)
     ) {
       void sendPasswordRecoveryCodeEmail(delivery)
-        .then(() =>
-          markPasswordRecoveryDelivery(delivery.challengeId, "sent"),
-        )
+        .then(() => markPasswordRecoveryDelivery(delivery.challengeId, "sent"))
         .catch(async () => {
           console.error("Password recovery email delivery failed");
           await markPasswordRecoveryDelivery(

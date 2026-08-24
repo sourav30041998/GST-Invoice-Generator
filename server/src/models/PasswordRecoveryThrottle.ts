@@ -24,4 +24,3 @@ export const PasswordRecoveryThrottleModel = model(
   "PasswordRecoveryThrottle",
   passwordRecoveryThrottleSchema,
 );
-

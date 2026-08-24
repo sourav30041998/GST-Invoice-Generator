@@ -246,7 +246,10 @@ export async function getRoomAllocations(
     createdAt: { $gte: historyStart },
   };
   const totalItems = await RoomAllocationModel.countDocuments(filter);
-  const totalPages = Math.max(1, Math.ceil(totalItems / ROOM_HISTORY_PAGE_SIZE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalItems / ROOM_HISTORY_PAGE_SIZE),
+  );
   const page = Math.min(query.page, totalPages);
   const items = await RoomAllocationModel.find(filter)
     .sort({ createdAt: -1, _id: -1 })

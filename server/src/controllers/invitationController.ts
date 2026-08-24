@@ -93,6 +93,7 @@ export const acceptOrganizationInvitation: RequestHandler = async (
           session,
         );
         organization.status = "active";
+        organization.onboardingComplete = true;
         await organization.save({ session });
         invitation.acceptedAt = new Date();
         invitation.acceptedByUserId = owner[0]._id;

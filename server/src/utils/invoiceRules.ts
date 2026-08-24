@@ -4,9 +4,7 @@ export type PersistedInvoiceWorkflowStatus =
   "draft" | "reserved" | "checkedIn" | "checkedOut" | "cancelled";
 
 export type EditableInvoiceWorkflowStatus =
-  | "reserved"
-  | "checkedIn"
-  | "checkedOut";
+  "reserved" | "checkedIn" | "checkedOut";
 
 export function assertExpectedVersion(
   actualVersion: number | undefined,

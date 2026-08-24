@@ -45,6 +45,10 @@ Backend runs on `http://localhost:5050`.
 
 See [MULTI_TENANCY.md](./MULTI_TENANCY.md) for the data model, API list, migration procedure, and rollout checklist.
 
+See [SERVICE_DATABASE_ISOLATION.md](./SERVICE_DATABASE_ISOLATION.md) for the
+Company-owned provisioning contract, separate Admin database, threat controls,
+and cutover order.
+
 See [PASSWORD_RECOVERY.md](./PASSWORD_RECOVERY.md) for the recovery API contract, MongoDB collections, SMTP setup, threat controls, and production verification plan.
 
 ## Room Inventory and Allocation
@@ -74,7 +78,7 @@ The production server serves the built React app and API from one origin. This k
 
 In Render, create a Node **Web Service** from the reviewed release branch with these values:
 
-- Build command: `npm ci --include=dev && npm run build && npm run db:create-indexes`
+- Build command: `npm ci --ignore-scripts --include=dev && npm run build`
 - Start command: `npm start`
 - Health check path: `/api/health`
 - Instance type: `Free`
@@ -84,17 +88,18 @@ Configure the following production environment variables in Render. Keep their v
 ```env
 NODE_ENV=production
 MONGODB_URI=<MongoDB Atlas connection string>
-MONGODB_DB_NAME=gst_invoice_generator
+MONGODB_DB_NAME=gst_invoice_company_prod
 MONGODB_IP_FAMILY=4
 CLIENT_ORIGIN=https://<your-render-service>.onrender.com
+COMPANY_APP_ORIGIN=https://<your-render-service>.onrender.com
 AUTH_REQUIRED=true
 SESSION_SECRET=<random secret with 32 or more characters>
 SESSION_TTL_MINUTES=480
-INVITATION_TOKEN_SECRET=<shared 32+ character invitation-token secret>
+INVITATION_TOKEN_SECRET=<Company-only 32+ character invitation-token secret>
 PASSWORD_RESET_SECRET=<dedicated random secret with 32 or more characters>
 ADMIN_INTERNAL_SHARED_SECRET=<shared 32+ character internal-service secret>
 SMTP_HOST=<authenticated SMTP host>
-SMTP_PORT=587
+SMTP_PORT=2525
 SMTP_USER=<SMTP user>
 SMTP_PASSWORD=<SMTP password or app password>
 SMTP_FROM=GST Invoice Generator <no-reply@example.com>
@@ -105,6 +110,11 @@ SESSION_COOKIE_SAMESITE=lax
 ALLOW_DATABASE_RESET=false
 REQUEST_BODY_LIMIT=2mb
 ```
+
+Run `npm run db:create-indexes` separately with a temporary index-management
+credential before switching the runtime service to its least-privilege user.
+Render Free blocks SMTP ports 25, 465, and 587, so use a provider that supports
+authenticated TLS delivery on port 2525.
 
 Before the first deployment of the multi-company branch, follow the one-time migration procedure in [MULTI_TENANCY.md](./MULTI_TENANCY.md). Deploy the separate Platform Admin service only after the Company service is healthy; its own repository documents administrator bootstrap and MFA enrollment.
 

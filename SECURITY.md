@@ -1,6 +1,6 @@
 # Company Service Security
 
-This repository contains the Company invoicing service only. Platform administration is an independent service with its own repository, host, session cookie, SMTP credential, TOTP encryption key, and operational documentation.
+This repository contains the Company invoicing service only. Platform administration is an independent service with its own repository, host, session cookie, database credential, TOTP encryption key, and operational documentation. Company alone owns invitation and password-recovery SMTP delivery.
 
 ## Enforced Controls
 
@@ -9,8 +9,8 @@ This repository contains the Company invoicing service only. Platform administra
 - Every authenticated write validates a per-session `X-CSRF-Token`; production unsafe requests also require the configured HTTPS origin.
 - Passwords use `scrypt`; strict validation and rate limits protect login and invitation acceptance.
 - JSON request bodies are size-limited. API responses are `no-store`; Helmet, CORS allowlists, compression, and production trust-proxy settings are applied centrally.
-- Invitation tokens are high entropy, one-time, expiring values. MongoDB stores only an HMAC hash using `INVITATION_TOKEN_SECRET`.
-- The company service has no platform-admin routes. Its three internal Admin
+- Invitation tokens are high entropy, one-time, expiring values derived and consumed only by Company. MongoDB stores only an HMAC hash using the Company-only `INVITATION_TOKEN_SECRET`.
+- The company service has no platform-admin routes. Its allowlisted internal Admin
   operations require a version 2 HMAC signature that binds the method, exact
   path, timestamp, random nonce, and body digest. Browser-originated, stale,
   modified, and replayed calls are rejected.
@@ -30,13 +30,14 @@ NODE_ENV=production
 MONGODB_URI=<TLS Atlas connection string for the Company service user>
 MONGODB_DB_NAME=<database name>
 CLIENT_ORIGIN=https://app.example.com
+COMPANY_APP_ORIGIN=https://app.example.com
 AUTH_REQUIRED=true
 SESSION_SECRET=<unique 32+ character secret>
-INVITATION_TOKEN_SECRET=<shared 32+ character invitation secret>
+INVITATION_TOKEN_SECRET=<Company-only 32+ character invitation secret>
 PASSWORD_RESET_SECRET=<dedicated 32+ character password-recovery secret>
 ADMIN_INTERNAL_SHARED_SECRET=<shared 32+ character internal-service secret>
 SMTP_HOST=<authenticated SMTP host>
-SMTP_PORT=587
+SMTP_PORT=2525
 SMTP_USER=<SMTP user>
 SMTP_PASSWORD=<SMTP password or app password>
 SMTP_FROM=GST Invoice Generator <no-reply@example.com>
@@ -47,7 +48,7 @@ TRUST_PROXY=true
 ALLOW_DATABASE_RESET=false
 ```
 
-Use an Atlas user with access only to the Company collections listed in `MULTI_TENANCY.md`. Keep all actual values in the deployment provider's encrypted secret manager, never in source control.
+Use an Atlas user with access only to the Company database listed in `SERVICE_DATABASE_ISOLATION.md`. Keep all actual values in the deployment provider's encrypted secret manager, never in source control. Admin must use a different database and user.
 
 ## Deployment Verification
 
@@ -62,6 +63,7 @@ Use an Atlas user with access only to the Company collections listed in `MULTI_T
 8. Verify that a room ID belonging to Company A returns `422` when submitted to Company B, and that two simultaneous reservations for the same room/date range produce one success and one `409` conflict.
 9. Verify a cancelled invoice releases its room allocation and a checked-out invoice can no longer be edited.
 10. Complete every item in the production verification section of [PASSWORD_RECOVERY.md](./PASSWORD_RECOVERY.md), including anti-enumeration, attempt carryover, replay rejection, session revocation, and SMTP failure monitoring.
+11. Confirm Admin has no Company MongoDB, SMTP, invitation-token, session, or password-recovery credential.
 
 For the full cross-service boundary and Platform Admin controls, use the `SECURITY_BOUNDARY.md` in the separate Platform Admin repository.
 

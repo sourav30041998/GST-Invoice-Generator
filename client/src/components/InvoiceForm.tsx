@@ -541,8 +541,8 @@ export function InvoiceForm({
     (editingInvoice?.status === "cancelled" ? "cancelled" : "checkedOut");
   const invoiceLocked = Boolean(
     editingInvoice &&
-      editingWorkflowStatus !== "reserved" &&
-      editingWorkflowStatus !== "checkedIn",
+    editingWorkflowStatus !== "reserved" &&
+    editingWorkflowStatus !== "checkedIn",
   );
   const workflowOptions: InvoiceWorkflowStatus[] = editingInvoice
     ? editingWorkflowStatus === "reserved"
@@ -741,693 +741,739 @@ export function InvoiceForm({
         className="invoice-form-fields"
         disabled={invoiceLocked || Boolean(validationDialogMessage)}
       >
-      {activeTab === "details" ? (
-        <>
-          <section className="panel">
-            <div className="panel-title">
-              <CalendarDays size={16} />
-              <span>Invoice Details</span>
-            </div>
-            <div className="form-grid">
-              <div className="field">
-                <label>Invoice Number</label>
-                <div className="readonly-box">{invoiceNumberText}</div>
+        {activeTab === "details" ? (
+          <>
+            <section className="panel">
+              <div className="panel-title">
+                <CalendarDays size={16} />
+                <span>Invoice Details</span>
               </div>
-              <div className="field">
-                <RequiredLabel>Invoice Date</RequiredLabel>
-                <input
-                  className="input"
-                  type="date"
-                  value={form.invDate}
-                  onChange={(event) =>
-                    updateForm("invDate", event.target.value)
-                  }
-                />
-              </div>
-              <div className="field">
-                <RequiredLabel>Arrival</RequiredLabel>
-                <input
-                  className="input"
-                  type="date"
-                  value={form.checkinDate}
-                  max={form.checkoutDate || undefined}
-                  onChange={(event) =>
-                    updateForm("checkinDate", event.target.value)
-                  }
-                  required
-                />
-              </div>
-              <div className="field">
-                <RequiredLabel>Departure</RequiredLabel>
-                <input
-                  className="input"
-                  type="date"
-                  value={form.checkoutDate}
-                  min={form.checkinDate || undefined}
-                  onChange={(event) =>
-                    updateForm("checkoutDate", event.target.value)
-                  }
-                  required
-                />
-              </div>
-              <div className="field">
-                <label>Confirmation No.</label>
-                <input
-                  className="input"
-                  value={form.confirmNo}
-                  onChange={(event) =>
-                    updateForm("confirmNo", event.target.value)
-                  }
-                />
-              </div>
-              <div className="field span-2 room-picker-field">
-                <RequiredLabel>Rooms</RequiredLabel>
-                <div className="room-picker">
-                  <div className="room-selection" aria-live="polite">
-                    {selectedRoomDetails.length ? (
-                      selectedRoomDetails.map((room) => (
-                        <span className="room-chip" key={room.roomId}>
-                          <BedDouble size={13} />
-                          {room.roomNumber}
-                          {room.roomType ? ` - ${room.roomType}` : ""}
-                          <button
-                            type="button"
-                            onClick={() => toggleRoom(room.roomId)}
-                            title={`Remove ${room.roomNumber}`}
-                          >
-                            <X size={13} />
-                          </button>
-                        </span>
-                      ))
-                    ) : (
-                      <span className="room-picker-placeholder">
-                        Select one or more rooms
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    className="input room-search-input"
-                    value={roomSearch}
-                    onChange={(event) => setRoomSearch(event.target.value)}
-                    placeholder="Search available rooms"
-                    disabled={
-                      !form.checkinDate ||
-                      !form.checkoutDate ||
-                      form.checkinDate >= form.checkoutDate
-                    }
-                    aria-label="Search available rooms"
-                  />
-                  <div
-                    className="room-option-list"
-                    role="listbox"
-                    aria-multiselectable="true"
-                  >
-                    {!form.checkinDate || !form.checkoutDate ? (
-                      <span className="room-option-message">
-                        Choose arrival and departure dates first.
-                      </span>
-                    ) : form.checkinDate >= form.checkoutDate ? (
-                      <span className="room-option-message">
-                        Departure must be after arrival.
-                      </span>
-                    ) : roomsLoading ? (
-                      <span className="room-option-message">
-                        Checking room availability...
-                      </span>
-                    ) : roomLoadError ? (
-                      <span className="room-option-message error">
-                        {roomLoadError}
-                      </span>
-                    ) : roomOptions.length ? (
-                      roomOptions.map((room) => {
-                        const selected = selectedRoomIds.has(room._id);
-                        return (
-                          <button
-                            className={`room-option${selected ? " selected" : ""}`}
-                            type="button"
-                            role="option"
-                            aria-selected={selected}
-                            key={room._id}
-                            onClick={() => toggleRoom(room._id)}
-                          >
-                            <span>{room.roomNumber}</span>
-                            <small>
-                              {[room.roomType, room.wing, room.floor]
-                                .filter(Boolean)
-                                .join(" - ") || "Standard room"}
-                            </small>
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <span className="room-option-message">
-                        No rooms are available for these dates.
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              {statusVisible ? (
+              <div className="form-grid">
                 <div className="field">
-                  <RequiredLabel>Status</RequiredLabel>
-                  <select
+                  <label>Invoice Number</label>
+                  <div className="readonly-box">{invoiceNumberText}</div>
+                </div>
+                <div className="field">
+                  <RequiredLabel>Invoice Date</RequiredLabel>
+                  <input
                     className="input"
-                    value={form.workflowStatus}
+                    type="date"
+                    value={form.invDate}
                     onChange={(event) =>
-                      updateForm(
-                        "workflowStatus",
-                        event.target.value as InvoiceWorkflowStatus,
-                      )
+                      updateForm("invDate", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <RequiredLabel>Arrival</RequiredLabel>
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.checkinDate}
+                    max={form.checkoutDate || undefined}
+                    onChange={(event) =>
+                      updateForm("checkinDate", event.target.value)
                     }
                     required
-                  >
-                    {workflowOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status === "draft"
-                          ? "Draft"
-                          : status === "reserved"
-                            ? "Reserved"
-                            : status === "checkedIn"
-                              ? "Checked In"
-                              : status === "checkedOut"
-                                ? "Checked Out"
-                                : "Cancelled"}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                </div>
+                <div className="field">
+                  <RequiredLabel>Departure</RequiredLabel>
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.checkoutDate}
+                    min={form.checkinDate || undefined}
+                    onChange={(event) =>
+                      updateForm("checkoutDate", event.target.value)
+                    }
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label>Confirmation No.</label>
+                  <input
+                    className="input"
+                    value={form.confirmNo}
+                    onChange={(event) =>
+                      updateForm("confirmNo", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="field span-2 room-picker-field">
+                  <RequiredLabel>Rooms</RequiredLabel>
+                  <div className="room-picker">
+                    <div className="room-selection" aria-live="polite">
+                      {selectedRoomDetails.length ? (
+                        selectedRoomDetails.map((room) => (
+                          <span className="room-chip" key={room.roomId}>
+                            <BedDouble size={13} />
+                            {room.roomNumber}
+                            {room.roomType ? ` - ${room.roomType}` : ""}
+                            <button
+                              type="button"
+                              onClick={() => toggleRoom(room.roomId)}
+                              title={`Remove ${room.roomNumber}`}
+                            >
+                              <X size={13} />
+                            </button>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="room-picker-placeholder">
+                          Select one or more rooms
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      className="input room-search-input"
+                      value={roomSearch}
+                      onChange={(event) => setRoomSearch(event.target.value)}
+                      placeholder="Search available rooms"
+                      disabled={
+                        !form.checkinDate ||
+                        !form.checkoutDate ||
+                        form.checkinDate >= form.checkoutDate
+                      }
+                      aria-label="Search available rooms"
+                    />
+                    <div
+                      className="room-option-list"
+                      role="listbox"
+                      aria-multiselectable="true"
+                    >
+                      {!form.checkinDate || !form.checkoutDate ? (
+                        <span className="room-option-message">
+                          Choose arrival and departure dates first.
+                        </span>
+                      ) : form.checkinDate >= form.checkoutDate ? (
+                        <span className="room-option-message">
+                          Departure must be after arrival.
+                        </span>
+                      ) : roomsLoading ? (
+                        <span className="room-option-message">
+                          Checking room availability...
+                        </span>
+                      ) : roomLoadError ? (
+                        <span className="room-option-message error">
+                          {roomLoadError}
+                        </span>
+                      ) : roomOptions.length ? (
+                        roomOptions.map((room) => {
+                          const selected = selectedRoomIds.has(room._id);
+                          return (
+                            <button
+                              className={`room-option${selected ? " selected" : ""}`}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              key={room._id}
+                              onClick={() => toggleRoom(room._id)}
+                            >
+                              <span>{room.roomNumber}</span>
+                              <small>
+                                {[room.roomType, room.wing, room.floor]
+                                  .filter(Boolean)
+                                  .join(" - ") || "Standard room"}
+                              </small>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <span className="room-option-message">
+                          No rooms are available for these dates.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {statusVisible ? (
+                  <div className="field">
+                    <RequiredLabel>Status</RequiredLabel>
+                    <select
+                      className="input"
+                      value={form.workflowStatus}
+                      onChange={(event) =>
+                        updateForm(
+                          "workflowStatus",
+                          event.target.value as InvoiceWorkflowStatus,
+                        )
+                      }
+                      required
+                    >
+                      {workflowOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status === "draft"
+                            ? "Draft"
+                            : status === "reserved"
+                              ? "Reserved"
+                              : status === "checkedIn"
+                                ? "Checked In"
+                                : status === "checkedOut"
+                                  ? "Checked Out"
+                                  : "Cancelled"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-title">
+                <FilePlus2 size={16} />
+                <span>Guest / Payee Details</span>
+              </div>
+              <div className="form-grid">
+                <div className="field span-2">
+                  <RequiredLabel>Payee Name</RequiredLabel>
+                  <input
+                    className="input"
+                    value={form.partyName}
+                    onChange={(event) =>
+                      updateForm("partyName", event.target.value)
+                    }
+                    placeholder="Mr. Rahul Sharma / ABC Corp"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label>GSTIN (B2B)</label>
+                  <input
+                    className="input"
+                    value={form.partyGSTIN}
+                    onChange={(event) =>
+                      updateForm("partyGSTIN", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <RequiredLabel>State</RequiredLabel>
+                  <StateCombobox
+                    value={form.partyState}
+                    onChange={(value) => updateForm("partyState", value)}
+                    states={stateOptions}
+                    required
+                  />
+                </div>
+                <div className="field span-2">
+                  <label>Group Name</label>
+                  <input
+                    className="input"
+                    value={form.groupName}
+                    onChange={(event) =>
+                      updateForm("groupName", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="field full">
+                  <RequiredLabel>Address</RequiredLabel>
+                  <textarea
+                    className="input min-h-20"
+                    value={form.partyAddress}
+                    onChange={(event) =>
+                      updateForm("partyAddress", event.target.value)
+                    }
+                    required
+                  />
+                </div>
+              </div>
+            </section>
+          </>
+        ) : null}
+
+        {activeTab === "items" ? (
+          <>
+            <section className="panel">
+              <div className="panel-title row-title">
+                <span>Charges & Services</span>
+                <span>
+                  GST applied to each charge or service based on preset
+                </span>
+              </div>
+              {fieldLimitMessage ? (
+                <div className="amount-limit-alert" role="alert">
+                  <AlertTriangle size={17} aria-hidden="true" />
+                  <span>{fieldLimitMessage}</span>
                 </div>
               ) : null}
-            </div>
-          </section>
-
-          <section className="panel">
-            <div className="panel-title">
-              <FilePlus2 size={16} />
-              <span>Guest / Payee Details</span>
-            </div>
-            <div className="form-grid">
-              <div className="field span-2">
-                <RequiredLabel>Payee Name</RequiredLabel>
-                <input
-                  className="input"
-                  value={form.partyName}
-                  onChange={(event) =>
-                    updateForm("partyName", event.target.value)
-                  }
-                  placeholder="Mr. Rahul Sharma / ABC Corp"
-                  required
-                />
-              </div>
-              <div className="field">
-                <label>GSTIN (B2B)</label>
-                <input
-                  className="input"
-                  value={form.partyGSTIN}
-                  onChange={(event) =>
-                    updateForm("partyGSTIN", event.target.value)
-                  }
-                />
-              </div>
-              <div className="field">
-                <RequiredLabel>State</RequiredLabel>
-                <StateCombobox
-                  value={form.partyState}
-                  onChange={(value) => updateForm("partyState", value)}
-                  states={stateOptions}
-                  required
-                />
-              </div>
-              <div className="field span-2">
-                <label>Group Name</label>
-                <input
-                  className="input"
-                  value={form.groupName}
-                  onChange={(event) =>
-                    updateForm("groupName", event.target.value)
-                  }
-                />
-              </div>
-              <div className="field full">
-                <RequiredLabel>Address</RequiredLabel>
-                <textarea
-                  className="input min-h-20"
-                  value={form.partyAddress}
-                  onChange={(event) =>
-                    updateForm("partyAddress", event.target.value)
-                  }
-                  required
-                />
-              </div>
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {activeTab === "items" ? (
-        <>
-          <section className="panel">
-            <div className="panel-title row-title">
-              <span>Charges & Services</span>
-              <span>GST applied to each charge or service based on preset</span>
-            </div>
-            {fieldLimitMessage ? (
-              <div className="amount-limit-alert" role="alert">
-                <AlertTriangle size={17} aria-hidden="true" />
-                <span>{fieldLimitMessage}</span>
-              </div>
-            ) : null}
-            <div className="table-wrap">
-              <table className="data-table charges-services-table">
-                <colgroup>
-                  <col className="charge-col-description" />
-                  <col className="charge-col-date" />
-                  <col className="charge-col-hsn" />
-                  <col className="charge-col-quantity" />
-                  <col className="charge-col-rate" />
-                  <col className="charge-col-tax" />
-                  <col className="charge-col-tax" />
-                  <col className="charge-col-tax" />
-                  <col className="charge-col-amount" />
-                  <col className="charge-col-amount" />
-                  <col className="charge-col-action" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th className="charge-heading-text">Preset / Description</th>
-                    <th className="charge-heading-text">Date</th>
-                    <th className="charge-heading-text">HSN</th>
-                    <th className="charge-heading-number">Qty</th>
-                    <th className="charge-heading-number">Rate</th>
-                    <th className="charge-heading-number">CGST%</th>
-                    <th className="charge-heading-number">SGST%</th>
-                    <th className="charge-heading-number">IGST%</th>
-                    <th className="charge-heading-number">Taxable</th>
-                    <th className="charge-heading-number">Total</th>
-                    <th className="charge-heading-action"><span className="sr-only">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineItems.map((line, index) => {
-                    const calculated = totals.lineItems[index];
-                    const taxableAmount = formatCurrency(
-                      calculated?.taxable || 0,
-                    );
-                    const totalAmount = formatCurrency(calculated?.total || 0);
-                    const currentPresetAvailable =
-                      line.presetKey === invoiceCustomTaxPreset.key ||
-                      taxPresets.some(
-                        (preset) => preset.key === line.presetKey,
-                      );
-                    return (
-                      <tr key={line.id}>
-                        <td>
-                          <select
-                            className="table-input mb-1"
-                            value={line.presetKey}
-                            onChange={(event) =>
-                              handlePresetChange(line.id, event.target.value)
-                            }
-                          >
-                            {!currentPresetAvailable ? (
-                              <option value={line.presetKey}>
-                                {line.presetKey} (saved)
-                              </option>
-                            ) : null}
-                            {taxPresets.map((preset) => (
-                              <option key={preset.key} value={preset.key}>
-                                {preset.label}
-                              </option>
-                            ))}
-                            <option value={invoiceCustomTaxPreset.key}>
-                              {invoiceCustomTaxPreset.label}
-                            </option>
-                          </select>
-                          <input
-                            className="table-input"
-                            value={line.description}
-                            onChange={(event) =>
-                              updateLine(line.id, {
-                                description: event.target.value,
-                              })
-                            }
-                            placeholder="Description"
-                          />
-                          {canUseInclusive(taxPresets, line.presetKey) ? (
-                            <label className="inclusive-check">
-                              <input
-                                type="checkbox"
-                                checked={line.taxInclusive}
-                                onChange={(event) =>
-                                  updateLine(line.id, {
-                                    taxInclusive: event.target.checked,
-                                  })
-                                }
-                              />
-                              <span>Rate includes GST</span>
-                            </label>
-                          ) : null}
-                        </td>
-                        <td>
-                          <input
-                            className="table-input"
-                            type="date"
-                            value={line.date}
-                            onChange={(event) =>
-                              updateLine(line.id, { date: event.target.value })
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="table-input"
-                            value={line.hsn}
-                            inputMode="numeric"
-                            onChange={(event) => {
-                              const nextHsn = event.target.value.replace(
-                                /\D/g,
-                                "",
-                              );
-                              if (nextHsn.length > 6) {
-                                setFieldLimitField({ id: line.id, type: "hsn" });
-                                return;
-                              }
-                              if (
-                                fieldLimitField?.id === line.id &&
-                                fieldLimitField.type === "hsn"
-                              ) {
-                                setFieldLimitField(null);
-                              }
-                              updateLine(line.id, { hsn: nextHsn });
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="table-input text-right"
-                            type="number"
-                            min="0.001"
-                            max="999"
-                            step="0.001"
-                            value={line.units}
-                            onChange={(event) => {
-                              const nextUnits = event.target.value;
-                              if (exceedsNumberLimit(nextUnits, 999)) {
-                                setFieldLimitField({ id: line.id, type: "units" });
-                                return;
-                              }
-                              if (
-                                fieldLimitField?.id === line.id &&
-                                fieldLimitField.type === "units"
-                              ) {
-                                setFieldLimitField(null);
-                              }
-                              updateLine(line.id, { units: nextUnits });
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="table-input text-right"
-                            type="number"
-                            min="0.01"
-                            max={MAX_INVOICE_AMOUNT}
-                            step="0.01"
-                            value={line.rate}
-                            onChange={(event) => {
-                              const nextRate = event.target.value;
-                              if (exceedsNumberLimit(nextRate, MAX_INVOICE_AMOUNT)) {
-                                setFieldLimitField({ id: line.id, type: "rate" });
-                                return;
-                              }
-                              if (
-                                fieldLimitField?.id === line.id &&
-                                fieldLimitField.type === "rate"
-                              ) {
-                                setFieldLimitField(null);
-                              }
-                              updateLine(line.id, { rate: nextRate });
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="table-input text-right"
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            value={line.cgstRate}
-                            onChange={(event) => {
-                              const nextRate = event.target.value;
-                              if (exceedsNumberLimit(nextRate, 100)) {
-                                setFieldLimitField({ id: line.id, type: "cgstRate" });
-                                return;
-                              }
-                              if (fieldLimitField?.id === line.id && fieldLimitField.type === "cgstRate") {
-                                setFieldLimitField(null);
-                              }
-                              updateLine(line.id, { cgstRate: Number(nextRate) || 0 });
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="table-input text-right"
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            value={line.sgstRate}
-                            onChange={(event) => {
-                              const nextRate = event.target.value;
-                              if (exceedsNumberLimit(nextRate, 100)) {
-                                setFieldLimitField({ id: line.id, type: "sgstRate" });
-                                return;
-                              }
-                              if (fieldLimitField?.id === line.id && fieldLimitField.type === "sgstRate") {
-                                setFieldLimitField(null);
-                              }
-                              updateLine(line.id, { sgstRate: Number(nextRate) || 0 });
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="table-input text-right"
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            value={line.igstRate}
-                            onChange={(event) => {
-                              const nextRate = event.target.value;
-                              if (exceedsNumberLimit(nextRate, 100)) {
-                                setFieldLimitField({ id: line.id, type: "igstRate" });
-                                return;
-                              }
-                              if (fieldLimitField?.id === line.id && fieldLimitField.type === "igstRate") {
-                                setFieldLimitField(null);
-                              }
-                              updateLine(line.id, { igstRate: Number(nextRate) || 0 });
-                            }}
-                          />
-                        </td>
-                        <td className="amount-cell" title={taxableAmount}>
-                          <span>{taxableAmount}</span>
-                        </td>
-                        <td className="amount-cell" title={totalAmount}>
-                          <span>{totalAmount}</span>
-                        </td>
-                        <td>
-                          <button
-                            className="icon-button danger"
-                            type="button"
-                            onClick={() =>
-                              setLineItems((current) =>
-                                current.filter((item) => item.id !== line.id),
-                              )
-                            }
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <button
-              className="add-row-button"
-              type="button"
-              onClick={() => addLine()}
-            >
-              <Plus size={15} />
-              Add line item
-            </button>
-          </section>
-
-          <section className="panel">
-            <div className="panel-title row-title">
-              <span>Adjustments</span>
-              <span>Optional additions and deductions after GST</span>
-            </div>
-            <div className="table-wrap">
-              <table className="data-table min-w-[620px]">
-                <thead>
-                  <tr>
-                    <th>Description</th>
-                    <th>Type</th>
-                    <th className="text-right">Amount</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {adjustments.length ? (
-                    adjustments.map((adjustment) => (
-                      <tr key={adjustment.id}>
-                        <td>
-                          <input
-                            className="table-input"
-                            value={adjustment.desc}
-                            onChange={(event) =>
-                              updateAdjustment(adjustment.id, {
-                                desc: event.target.value,
-                              })
-                            }
-                            placeholder="Round off / extra bed / discount"
-                          />
-                        </td>
-                        <td>
-                          <select
-                            className="table-input"
-                            value={adjustment.type}
-                            onChange={(event) =>
-                              updateAdjustment(adjustment.id, {
-                                type: event.target.value as "add" | "deduct",
-                              })
-                            }
-                          >
-                            <option value="add">Add</option>
-                            <option value="deduct">Deduct</option>
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            className="table-input text-right"
-                            type="number"
-                            min="0"
-                            max={MAX_INVOICE_AMOUNT}
-                            step="0.01"
-                            value={adjustment.amount}
-                            onChange={(event) => {
-                              const nextAmount = event.target.value;
-                              if (
-                                exceedsNumberLimit(
-                                  nextAmount,
-                                  MAX_INVOICE_AMOUNT,
-                                )
-                              ) {
-                                setFieldLimitField({
-                                  id: adjustment.id,
-                                  type: "adjustment",
-                                });
-                                return;
-                              }
-                              if (
-                                fieldLimitField?.id === adjustment.id &&
-                                fieldLimitField.type === "adjustment"
-                              ) {
-                                setFieldLimitField(null);
-                              }
-                              updateAdjustment(adjustment.id, {
-                                amount: nextAmount,
-                              });
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <button
-                            className="icon-button danger"
-                            type="button"
-                            onClick={() =>
-                              setAdjustments((current) =>
-                                current.filter(
-                                  (item) => item.id !== adjustment.id,
-                                ),
-                              )
-                            }
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
+              <div className="table-wrap">
+                <table className="data-table charges-services-table">
+                  <colgroup>
+                    <col className="charge-col-description" />
+                    <col className="charge-col-date" />
+                    <col className="charge-col-hsn" />
+                    <col className="charge-col-quantity" />
+                    <col className="charge-col-rate" />
+                    <col className="charge-col-tax" />
+                    <col className="charge-col-tax" />
+                    <col className="charge-col-tax" />
+                    <col className="charge-col-amount" />
+                    <col className="charge-col-amount" />
+                    <col className="charge-col-action" />
+                  </colgroup>
+                  <thead>
                     <tr>
-                      <td className="empty-row" colSpan={4}>
-                        No adjustments added.
-                      </td>
+                      <th className="charge-heading-text">
+                        Preset / Description
+                      </th>
+                      <th className="charge-heading-text">Date</th>
+                      <th className="charge-heading-text">HSN</th>
+                      <th className="charge-heading-number">Qty</th>
+                      <th className="charge-heading-number">Rate</th>
+                      <th className="charge-heading-number">CGST%</th>
+                      <th className="charge-heading-number">SGST%</th>
+                      <th className="charge-heading-number">IGST%</th>
+                      <th className="charge-heading-number">Taxable</th>
+                      <th className="charge-heading-number">Total</th>
+                      <th className="charge-heading-action">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <button
-              className="add-row-button"
-              type="button"
-              onClick={() =>
-                setAdjustments((current) => [...current, makeAdjustment()])
-              }
-            >
-              <Plus size={15} />
-              Add adjustment
-            </button>
-          </section>
+                  </thead>
+                  <tbody>
+                    {lineItems.map((line, index) => {
+                      const calculated = totals.lineItems[index];
+                      const taxableAmount = formatCurrency(
+                        calculated?.taxable || 0,
+                      );
+                      const totalAmount = formatCurrency(
+                        calculated?.total || 0,
+                      );
+                      const currentPresetAvailable =
+                        line.presetKey === invoiceCustomTaxPreset.key ||
+                        taxPresets.some(
+                          (preset) => preset.key === line.presetKey,
+                        );
+                      return (
+                        <tr key={line.id}>
+                          <td>
+                            <select
+                              className="table-input mb-1"
+                              value={line.presetKey}
+                              onChange={(event) =>
+                                handlePresetChange(line.id, event.target.value)
+                              }
+                            >
+                              {!currentPresetAvailable ? (
+                                <option value={line.presetKey}>
+                                  {line.presetKey} (saved)
+                                </option>
+                              ) : null}
+                              {taxPresets.map((preset) => (
+                                <option key={preset.key} value={preset.key}>
+                                  {preset.label}
+                                </option>
+                              ))}
+                              <option value={invoiceCustomTaxPreset.key}>
+                                {invoiceCustomTaxPreset.label}
+                              </option>
+                            </select>
+                            <input
+                              className="table-input"
+                              value={line.description}
+                              onChange={(event) =>
+                                updateLine(line.id, {
+                                  description: event.target.value,
+                                })
+                              }
+                              placeholder="Description"
+                            />
+                            {canUseInclusive(taxPresets, line.presetKey) ? (
+                              <label className="inclusive-check">
+                                <input
+                                  type="checkbox"
+                                  checked={line.taxInclusive}
+                                  onChange={(event) =>
+                                    updateLine(line.id, {
+                                      taxInclusive: event.target.checked,
+                                    })
+                                  }
+                                />
+                                <span>Rate includes GST</span>
+                              </label>
+                            ) : null}
+                          </td>
+                          <td>
+                            <input
+                              className="table-input"
+                              type="date"
+                              value={line.date}
+                              onChange={(event) =>
+                                updateLine(line.id, {
+                                  date: event.target.value,
+                                })
+                              }
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="table-input"
+                              value={line.hsn}
+                              inputMode="numeric"
+                              onChange={(event) => {
+                                const nextHsn = event.target.value.replace(
+                                  /\D/g,
+                                  "",
+                                );
+                                if (nextHsn.length > 6) {
+                                  setFieldLimitField({
+                                    id: line.id,
+                                    type: "hsn",
+                                  });
+                                  return;
+                                }
+                                if (
+                                  fieldLimitField?.id === line.id &&
+                                  fieldLimitField.type === "hsn"
+                                ) {
+                                  setFieldLimitField(null);
+                                }
+                                updateLine(line.id, { hsn: nextHsn });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="table-input text-right"
+                              type="number"
+                              min="0.001"
+                              max="999"
+                              step="0.001"
+                              value={line.units}
+                              onChange={(event) => {
+                                const nextUnits = event.target.value;
+                                if (exceedsNumberLimit(nextUnits, 999)) {
+                                  setFieldLimitField({
+                                    id: line.id,
+                                    type: "units",
+                                  });
+                                  return;
+                                }
+                                if (
+                                  fieldLimitField?.id === line.id &&
+                                  fieldLimitField.type === "units"
+                                ) {
+                                  setFieldLimitField(null);
+                                }
+                                updateLine(line.id, { units: nextUnits });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="table-input text-right"
+                              type="number"
+                              min="0.01"
+                              max={MAX_INVOICE_AMOUNT}
+                              step="0.01"
+                              value={line.rate}
+                              onChange={(event) => {
+                                const nextRate = event.target.value;
+                                if (
+                                  exceedsNumberLimit(
+                                    nextRate,
+                                    MAX_INVOICE_AMOUNT,
+                                  )
+                                ) {
+                                  setFieldLimitField({
+                                    id: line.id,
+                                    type: "rate",
+                                  });
+                                  return;
+                                }
+                                if (
+                                  fieldLimitField?.id === line.id &&
+                                  fieldLimitField.type === "rate"
+                                ) {
+                                  setFieldLimitField(null);
+                                }
+                                updateLine(line.id, { rate: nextRate });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="table-input text-right"
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={line.cgstRate}
+                              onChange={(event) => {
+                                const nextRate = event.target.value;
+                                if (exceedsNumberLimit(nextRate, 100)) {
+                                  setFieldLimitField({
+                                    id: line.id,
+                                    type: "cgstRate",
+                                  });
+                                  return;
+                                }
+                                if (
+                                  fieldLimitField?.id === line.id &&
+                                  fieldLimitField.type === "cgstRate"
+                                ) {
+                                  setFieldLimitField(null);
+                                }
+                                updateLine(line.id, {
+                                  cgstRate: Number(nextRate) || 0,
+                                });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="table-input text-right"
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={line.sgstRate}
+                              onChange={(event) => {
+                                const nextRate = event.target.value;
+                                if (exceedsNumberLimit(nextRate, 100)) {
+                                  setFieldLimitField({
+                                    id: line.id,
+                                    type: "sgstRate",
+                                  });
+                                  return;
+                                }
+                                if (
+                                  fieldLimitField?.id === line.id &&
+                                  fieldLimitField.type === "sgstRate"
+                                ) {
+                                  setFieldLimitField(null);
+                                }
+                                updateLine(line.id, {
+                                  sgstRate: Number(nextRate) || 0,
+                                });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="table-input text-right"
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={line.igstRate}
+                              onChange={(event) => {
+                                const nextRate = event.target.value;
+                                if (exceedsNumberLimit(nextRate, 100)) {
+                                  setFieldLimitField({
+                                    id: line.id,
+                                    type: "igstRate",
+                                  });
+                                  return;
+                                }
+                                if (
+                                  fieldLimitField?.id === line.id &&
+                                  fieldLimitField.type === "igstRate"
+                                ) {
+                                  setFieldLimitField(null);
+                                }
+                                updateLine(line.id, {
+                                  igstRate: Number(nextRate) || 0,
+                                });
+                              }}
+                            />
+                          </td>
+                          <td className="amount-cell" title={taxableAmount}>
+                            <span>{taxableAmount}</span>
+                          </td>
+                          <td className="amount-cell" title={totalAmount}>
+                            <span>{totalAmount}</span>
+                          </td>
+                          <td>
+                            <button
+                              className="icon-button danger"
+                              type="button"
+                              onClick={() =>
+                                setLineItems((current) =>
+                                  current.filter((item) => item.id !== line.id),
+                                )
+                              }
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                className="add-row-button"
+                type="button"
+                onClick={() => addLine()}
+              >
+                <Plus size={15} />
+                Add line item
+              </button>
+            </section>
 
-          <section className="summary-strip">
-            <div className="totals-panel">
-              <div className="total-row">
-                <span>Taxable Value</span>
-                <SummaryAmount value={totals.totalTaxable} />
+            <section className="panel">
+              <div className="panel-title row-title">
+                <span>Adjustments</span>
+                <span>Optional additions and deductions after GST</span>
               </div>
-              <div className="total-row">
-                <span>CGST</span>
-                <SummaryAmount value={totals.totalCGST} />
+              <div className="table-wrap">
+                <table className="data-table min-w-[620px]">
+                  <thead>
+                    <tr>
+                      <th>Description</th>
+                      <th>Type</th>
+                      <th className="text-right">Amount</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adjustments.length ? (
+                      adjustments.map((adjustment) => (
+                        <tr key={adjustment.id}>
+                          <td>
+                            <input
+                              className="table-input"
+                              value={adjustment.desc}
+                              onChange={(event) =>
+                                updateAdjustment(adjustment.id, {
+                                  desc: event.target.value,
+                                })
+                              }
+                              placeholder="Round off / extra bed / discount"
+                            />
+                          </td>
+                          <td>
+                            <select
+                              className="table-input"
+                              value={adjustment.type}
+                              onChange={(event) =>
+                                updateAdjustment(adjustment.id, {
+                                  type: event.target.value as "add" | "deduct",
+                                })
+                              }
+                            >
+                              <option value="add">Add</option>
+                              <option value="deduct">Deduct</option>
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              className="table-input text-right"
+                              type="number"
+                              min="0"
+                              max={MAX_INVOICE_AMOUNT}
+                              step="0.01"
+                              value={adjustment.amount}
+                              onChange={(event) => {
+                                const nextAmount = event.target.value;
+                                if (
+                                  exceedsNumberLimit(
+                                    nextAmount,
+                                    MAX_INVOICE_AMOUNT,
+                                  )
+                                ) {
+                                  setFieldLimitField({
+                                    id: adjustment.id,
+                                    type: "adjustment",
+                                  });
+                                  return;
+                                }
+                                if (
+                                  fieldLimitField?.id === adjustment.id &&
+                                  fieldLimitField.type === "adjustment"
+                                ) {
+                                  setFieldLimitField(null);
+                                }
+                                updateAdjustment(adjustment.id, {
+                                  amount: nextAmount,
+                                });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <button
+                              className="icon-button danger"
+                              type="button"
+                              onClick={() =>
+                                setAdjustments((current) =>
+                                  current.filter(
+                                    (item) => item.id !== adjustment.id,
+                                  ),
+                                )
+                              }
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="empty-row" colSpan={4}>
+                          No adjustments added.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <div className="total-row">
-                <span>SGST</span>
-                <SummaryAmount value={totals.totalSGST} />
+              <button
+                className="add-row-button"
+                type="button"
+                onClick={() =>
+                  setAdjustments((current) => [...current, makeAdjustment()])
+                }
+              >
+                <Plus size={15} />
+                Add adjustment
+              </button>
+            </section>
+
+            <section className="summary-strip">
+              <div className="totals-panel">
+                <div className="total-row">
+                  <span>Taxable Value</span>
+                  <SummaryAmount value={totals.totalTaxable} />
+                </div>
+                <div className="total-row">
+                  <span>CGST</span>
+                  <SummaryAmount value={totals.totalCGST} />
+                </div>
+                <div className="total-row">
+                  <span>SGST</span>
+                  <SummaryAmount value={totals.totalSGST} />
+                </div>
+                <div className="total-row">
+                  <span>IGST</span>
+                  <SummaryAmount value={totals.totalIGST} />
+                </div>
+                <div className="total-row grand">
+                  <span>Grand Total</span>
+                  <SummaryAmount value={totals.grandTotal} />
+                </div>
+                <div className="total-row add">
+                  <span>Additions</span>
+                  <SummaryAmount value={totals.addTotal} />
+                </div>
+                <div className="total-row deduct">
+                  <span>Deductions</span>
+                  <SummaryAmount value={totals.deductTotal} />
+                </div>
+                <div className="total-row net">
+                  <span>Net Total</span>
+                  <SummaryAmount value={totals.netTotal} />
+                </div>
+                <div className="words">
+                  Rupees {totals.netTotal > 0 ? netTotalWords : "Zero"} Only
+                </div>
               </div>
-              <div className="total-row">
-                <span>IGST</span>
-                <SummaryAmount value={totals.totalIGST} />
-              </div>
-              <div className="total-row grand">
-                <span>Grand Total</span>
-                <SummaryAmount value={totals.grandTotal} />
-              </div>
-              <div className="total-row add">
-                <span>Additions</span>
-                <SummaryAmount value={totals.addTotal} />
-              </div>
-              <div className="total-row deduct">
-                <span>Deductions</span>
-                <SummaryAmount value={totals.deductTotal} />
-              </div>
-              <div className="total-row net">
-                <span>Net Total</span>
-                <SummaryAmount value={totals.netTotal} />
-              </div>
-              <div className="words">
-                Rupees{" "}
-                {totals.netTotal > 0 ? netTotalWords : "Zero"}{" "}
-                Only
-              </div>
-            </div>
-          </section>
-        </>
-      ) : null}
+            </section>
+          </>
+        ) : null}
       </fieldset>
 
       <div className="action-bar">

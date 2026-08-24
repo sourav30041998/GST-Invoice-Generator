@@ -44,19 +44,12 @@ test("binds an OTP hash to its challenge and compares hashes safely", () => {
   const expected = hashRecoveryOtp(secret, firstChallenge, "123456");
 
   assert.equal(
-    safeHashEqual(
-      expected,
-      hashRecoveryOtp(secret, firstChallenge, "123456"),
-    ),
+    safeHashEqual(expected, hashRecoveryOtp(secret, firstChallenge, "123456")),
     true,
   );
   assert.equal(
-    safeHashEqual(
-      expected,
-      hashRecoveryOtp(secret, secondChallenge, "123456"),
-    ),
+    safeHashEqual(expected, hashRecoveryOtp(secret, secondChallenge, "123456")),
     false,
   );
   assert.equal(safeHashEqual(expected, "not-a-valid-hash"), false);
 });
-

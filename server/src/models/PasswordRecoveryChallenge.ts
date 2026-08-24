@@ -55,4 +55,3 @@ export const PasswordRecoveryChallengeModel = model(
   "PasswordRecoveryChallenge",
   passwordRecoveryChallengeSchema,
 );
-

@@ -68,4 +68,3 @@ export function safeHashEqual(actual: string, expected: string) {
     Buffer.from(expected, "hex"),
   );
 }
-

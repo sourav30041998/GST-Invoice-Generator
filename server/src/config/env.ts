@@ -23,6 +23,7 @@ const envSchema = z.object({
     .refine((value) => value === 4 || value === 6)
     .optional(),
   CLIENT_ORIGIN: z.string().trim().min(1).default("http://localhost:5173"),
+  COMPANY_APP_ORIGIN: z.string().trim().min(1).optional(),
   SESSION_SECRET: z.string().optional(),
   INVITATION_TOKEN_SECRET: z.string().min(32),
   PASSWORD_RESET_SECRET: z.string().min(32).optional(),
@@ -31,7 +32,16 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
   SMTP_USER: z.string().trim().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
-  SMTP_FROM: z.string().trim().min(3).max(320).optional(),
+  SMTP_FROM: z
+    .string()
+    .trim()
+    .min(3)
+    .max(320)
+    .refine(
+      (value) => !/[\r\n]/.test(value),
+      "SMTP_FROM cannot contain new lines",
+    )
+    .optional(),
   SMTP_SECURE: booleanStringSchema,
   SESSION_TTL_MINUTES: z.coerce
     .number()
@@ -67,11 +77,11 @@ function toBoolean(value: "true" | "false" | undefined, fallback: boolean) {
 const clientOrigins = parsedEnv.CLIENT_ORIGIN.split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const companyAppOrigin = parsedEnv.COMPANY_APP_ORIGIN || clientOrigins[0];
 
 const authRequired = toBoolean(parsedEnv.AUTH_REQUIRED, true);
 const cookieSecure = toBoolean(parsedEnv.COOKIE_SECURE, isProduction);
-const sessionCookieSameSite =
-  parsedEnv.SESSION_COOKIE_SAMESITE || "lax";
+const sessionCookieSameSite = parsedEnv.SESSION_COOKIE_SAMESITE || "lax";
 const smtpValues = [
   parsedEnv.SMTP_HOST,
   parsedEnv.SMTP_PORT,
@@ -86,6 +96,26 @@ const passwordResetSecret =
 if (!clientOrigins.length) {
   throw new Error("CLIENT_ORIGIN must include at least one trusted origin");
 }
+
+function validateExactOrigin(value: string, variableName: string) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${variableName} contains an invalid URL origin`);
+  }
+  if (
+    url.origin !== value ||
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error(`${variableName} values must be exact HTTP(S) origins`);
+  }
+}
+
+clientOrigins.forEach((origin) => validateExactOrigin(origin, "CLIENT_ORIGIN"));
+validateExactOrigin(companyAppOrigin, "COMPANY_APP_ORIGIN");
 
 if (smtpValues.some(Boolean) && !smtpConfigured) {
   throw new Error(
@@ -107,8 +137,20 @@ if (isProduction) {
     throw new Error("Production CLIENT_ORIGIN values must use HTTPS");
   }
 
-  if (/mongodb:\/\/(localhost|127\.0\.0\.1)/i.test(parsedEnv.MONGODB_URI)) {
-    throw new Error("Production MONGODB_URI must not point to localhost");
+  if (!parsedEnv.COMPANY_APP_ORIGIN) {
+    throw new Error("Production requires COMPANY_APP_ORIGIN");
+  }
+  if (!companyAppOrigin.startsWith("https://")) {
+    throw new Error("Production COMPANY_APP_ORIGIN must use HTTPS");
+  }
+  if (!clientOrigins.includes(companyAppOrigin)) {
+    throw new Error(
+      "Production COMPANY_APP_ORIGIN must also appear in CLIENT_ORIGIN",
+    );
+  }
+
+  if (!parsedEnv.MONGODB_URI.startsWith("mongodb+srv://")) {
+    throw new Error("Production MongoDB must use a TLS-enabled Atlas SRV URI");
   }
 
   if (!authRequired) {
@@ -120,15 +162,29 @@ if (isProduction) {
   }
 
   if (!parsedEnv.PASSWORD_RESET_SECRET) {
-    throw new Error(
-      "Production requires a dedicated PASSWORD_RESET_SECRET",
-    );
+    throw new Error("Production requires a dedicated PASSWORD_RESET_SECRET");
   }
 
   if (!smtpConfigured) {
     throw new Error("Production requires SMTP email delivery configuration");
   }
 
+  const productionSecrets = [
+    parsedEnv.SESSION_SECRET,
+    parsedEnv.INVITATION_TOKEN_SECRET,
+    parsedEnv.PASSWORD_RESET_SECRET,
+    parsedEnv.ADMIN_INTERNAL_SHARED_SECRET,
+  ].filter((value): value is string => Boolean(value));
+  if (
+    productionSecrets.some((value) =>
+      /(replace|change[-_ ]?me|example|your[-_ ]|placeholder)/i.test(value),
+    )
+  ) {
+    throw new Error("Production security secrets cannot contain placeholders");
+  }
+  if (new Set(productionSecrets).size !== productionSecrets.length) {
+    throw new Error("Production security secrets must be distinct");
+  }
 }
 
 if (!authRequired) {
@@ -146,6 +202,7 @@ if (sessionCookieSameSite === "none" && !cookieSecure) {
 export const env = {
   ...parsedEnv,
   CLIENT_ORIGINS: clientOrigins,
+  COMPANY_APP_ORIGIN: companyAppOrigin,
   AUTH_REQUIRED: authRequired,
   TRUST_PROXY: toBoolean(parsedEnv.TRUST_PROXY, isProduction),
   COOKIE_SECURE: cookieSecure,

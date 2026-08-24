@@ -6,6 +6,7 @@ import { CounterModel } from "../models/Counter.js";
 import { InvoiceDraftModel } from "../models/InvoiceDraft.js";
 import { InvoiceModel } from "../models/Invoice.js";
 import { InternalRequestNonceModel } from "../models/InternalRequestNonce.js";
+import { InternalCommandModel } from "../models/InternalCommand.js";
 import { OrganizationModel } from "../models/Organization.js";
 import { OrganizationInvitationModel } from "../models/OrganizationInvitation.js";
 import { PasswordRecoveryChallengeModel } from "../models/PasswordRecoveryChallenge.js";
@@ -24,6 +25,7 @@ const models = [
   CounterModel,
   InvoiceDraftModel,
   InvoiceModel,
+  InternalCommandModel,
   InternalRequestNonceModel,
   OrganizationModel,
   OrganizationInvitationModel,
@@ -66,6 +68,23 @@ async function createIndexes() {
         dropIndexIfPresent(collection, index),
       ),
     );
+    const duplicateOpenInvitations =
+      await OrganizationInvitationModel.aggregate([
+        {
+          $match: {
+            acceptedAt: { $exists: false },
+            revokedAt: { $exists: false },
+          },
+        },
+        { $group: { _id: "$email", count: { $sum: 1 } } },
+        { $match: { count: { $gt: 1 } } },
+        { $limit: 1 },
+      ]);
+    if (duplicateOpenInvitations.length) {
+      throw new Error(
+        "Duplicate open owner invitations exist; revoke duplicates before creating indexes",
+      );
+    }
     await Promise.all(models.map((model) => model.createIndexes()));
     console.log(`MongoDB indexes are ready for ${models.length} collections.`);
   } finally {

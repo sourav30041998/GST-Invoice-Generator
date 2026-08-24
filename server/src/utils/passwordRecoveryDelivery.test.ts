@@ -4,10 +4,7 @@ import { recoveryRecipientMatchesRequest } from "./passwordRecoveryDelivery.js";
 
 test("allows delivery only to the normalized requested address", () => {
   assert.equal(
-    recoveryRecipientMatchesRequest(
-      " Owner@Example.com ",
-      "owner@example.COM",
-    ),
+    recoveryRecipientMatchesRequest(" Owner@Example.com ", "owner@example.COM"),
     true,
   );
 });

@@ -165,11 +165,7 @@ export async function createPasswordRecoveryRequest(
         }
       : {}),
     throttleId: throttle._id,
-    otpHash: hashRecoveryOtp(
-      env.PASSWORD_RESET_SECRET,
-      challengeToken,
-      otp,
-    ),
+    otpHash: hashRecoveryOtp(env.PASSWORD_RESET_SECRET, challengeToken, otp),
     attemptCount: 0,
     expiresAt,
     deliveryStatus: recognizedAccount ? "queued" : "suppressed",
@@ -456,4 +452,3 @@ export async function completePasswordRecovery(
 
   return notification;
 }
-

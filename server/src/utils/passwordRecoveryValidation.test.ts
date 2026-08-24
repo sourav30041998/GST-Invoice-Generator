@@ -69,4 +69,3 @@ test("requires a strong matching password pair", () => {
     false,
   );
 });
-

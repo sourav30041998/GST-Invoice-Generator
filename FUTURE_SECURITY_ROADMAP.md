@@ -4,7 +4,13 @@
 
 This document records security controls deliberately deferred from the current release. It is a design and delivery checklist, not evidence that a listed control has already been implemented.
 
-The present architecture already separates the Company application from the Platform Admin application, uses server-side organization scoping, MFA for platform administrators, HMAC-signed internal calls, CSRF protection, expiring hashed invitation tokens, and HTTP-only sessions. See [SECURITY.md](./SECURITY.md) and [SERVICE_SEPARATION.md](./SERVICE_SEPARATION.md) for the currently enforced controls.
+The present architecture already separates Company and Admin repositories,
+origins, databases, and runtime users; uses server-side organization scoping,
+Admin MFA, replay-protected HMAC internal calls, persistent write idempotency,
+CSRF protection, expiring hashed invitation tokens, and HTTP-only sessions. See
+[SECURITY.md](./SECURITY.md) and
+[SERVICE_DATABASE_ISOLATION.md](./SERVICE_DATABASE_ISOLATION.md) for enforced
+controls.
 
 ## Security Goals
 
@@ -16,14 +22,14 @@ The present architecture already separates the Company application from the Plat
 
 ## Delivery Order
 
-| Phase | Priority | Outcome | Main owners |
-| --- | --- | --- | --- |
-| 1 | Required before production | Deployment and database least privilege | Platform / database administrator |
-| 2 | High | Durable abuse protection and observability | Backend / Platform |
-| 3 | High | Stronger service-to-service trust | Backend / Platform |
-| 4 | High | Phishing-resistant privileged access | Backend / Admin operations |
-| 5 | Medium | Stronger data-at-rest protection and recovery | Backend / Database administrator |
-| 6 | Ongoing | Automated assurance and incident readiness | Engineering / Operations |
+| Phase | Priority                   | Outcome                                       | Main owners                       |
+| ----- | -------------------------- | --------------------------------------------- | --------------------------------- |
+| 1     | Required before production | Deployment and database least privilege       | Platform / database administrator |
+| 2     | High                       | Durable abuse protection and observability    | Backend / Platform                |
+| 3     | High                       | Stronger service-to-service trust             | Backend / Platform                |
+| 4     | High                       | Phishing-resistant privileged access          | Backend / Admin operations        |
+| 5     | Medium                     | Stronger data-at-rest protection and recovery | Backend / Database administrator  |
+| 6     | Ongoing                    | Automated assurance and incident readiness    | Engineering / Operations          |
 
 ## Phase 1: Production Isolation and Least Privilege
 
@@ -44,24 +50,28 @@ The present architecture already separates the Company application from the Plat
 
 Create distinct Atlas custom roles and database users. Built-in broad roles are not adequate for this production design.
 
-| Database user | Collections | Required actions |
-| --- | --- | --- |
-| Company runtime | `auditlogs`, `businessprofiles`, `counters`, `invoices`, `invoicedrafts`, `organizations`, `organizationinvitations`, `referencedatas`, `schemamigrations`, `sessions`, `settings`, `users` | Runtime reads and writes only |
-| Admin runtime | `organizations`, `organizationinvitations`, `platformadmins`, `platformauditlogs`, `platformsessions` | Runtime reads and writes only |
-| Migration/index operator | Explicit temporary collection list | Create indexes and perform maintenance only during planned windows |
+| Database user            | Collections                                                                                            | Required actions                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Company runtime          | Company database only, including tenant data, organizations, invitations, nonces, and command receipts | Runtime reads and writes only                                      |
+| Admin runtime            | Admin database only: platform identities, sessions, login throttles, and audits                        | Runtime reads and writes only                                      |
+| Migration/index operator | Explicit temporary collection list                                                                     | Create indexes and perform maintenance only during planned windows |
 
 - Do not grant `atlasAdmin`, `readWriteAnyDatabase`, `dbOwner`, or wildcard collection access to runtime users.
 - Store each connection URI only in the service that needs it.
 - Change the existing broad development-style database password after the two runtime users are live.
 - Restrict Atlas network access to deployment egress IPs or private networking. Enforce TLS.
 
-The two services intentionally share `organizations` and `organizationinvitations` because invitation redemption must activate an organization atomically. This is the only allowed shared data boundary. Atlas supports custom roles scoped to named database collections; configure these using the Atlas UI or Administration API. [Atlas custom database roles](https://www.mongodb.com/docs/atlas/security-add-mongodb-roles/)
+The services share no MongoDB collection. Company owns organization activation
+and invitation redemption atomically. On the free tier, separate database names
+and database-scoped users may live on one cluster; separate projects/clusters
+remain a future physical-isolation upgrade.
 
 ### 3. Use a managed secret store and rotation process
 
 - Store all production secrets in the hosting provider's encrypted secret manager or a dedicated vault, never in source files, browser variables, or logs.
 - Use different secrets for Company sessions, Admin sessions, Admin TOTP encryption, email delivery, database users, and deployment access.
-- Keep only these two temporary cross-service shared secrets: `INVITATION_TOKEN_SECRET` and `ADMIN_INTERNAL_SHARED_SECRET`.
+- `ADMIN_INTERNAL_SHARED_SECRET` is the only cross-service application secret.
+  `INVITATION_TOKEN_SECRET` remains Company-only.
 - Maintain a written rotation runbook: add new secret, deploy both readers, switch issuer, invalidate old sessions or tokens when required, remove old secret, and record completion.
 
 **Acceptance checks**
@@ -108,7 +118,9 @@ Replace process-memory `express-rate-limit` stores with a shared Redis-backed st
 
 ## Phase 3: Stronger Admin-to-Company Trust
 
-The existing HMAC plus 60-second timestamp check is a sound interim control. The target state removes dependence on a broadly shared secret and reduces replay exposure.
+The existing HMAC binds method, exact path/query, timestamp, random nonce, and
+body digest; Company persists nonce replay protection and write idempotency. The
+target state removes dependence on a symmetric shared secret.
 
 ### 1. Private network and mutual TLS
 

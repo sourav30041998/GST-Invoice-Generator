@@ -1,0 +1,61 @@
+services:
+  - type: web
+    name: gst-invoice-company
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci --ignore-scripts --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24.14.1"
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        sync: false
+      - key: MONGODB_IP_FAMILY
+        value: "4"
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: COMPANY_APP_ORIGIN
+        sync: false
+      - key: VITE_API_URL
+        value: /api
+      - key: AUTH_REQUIRED
+        value: "true"
+      - key: SESSION_SECRET
+        sync: false
+      - key: INVITATION_TOKEN_SECRET
+        sync: false
+      - key: PASSWORD_RESET_SECRET
+        sync: false
+      - key: ADMIN_INTERNAL_SHARED_SECRET
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "2525"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SESSION_TTL_MINUTES
+        value: "480"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: SESSION_COOKIE_SAMESITE
+        value: lax
+      - key: ALLOW_DATABASE_RESET
+        value: "false"
+      - key: REQUEST_BODY_LIMIT
+        value: 2mb

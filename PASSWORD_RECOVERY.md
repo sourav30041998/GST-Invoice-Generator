@@ -26,7 +26,7 @@ Unknown or inactive accounts receive a suppressed challenge and no email.
 
 The public API intentionally does not return `Invalid email` for an unknown
 account. Such a response would expose registered owner addresses through account
-enumeration. Invalid email *syntax* is rejected, while valid but unknown addresses
+enumeration. Invalid email _syntax_ is rejected, while valid but unknown addresses
 receive the same status, message, response shape, and screen as known addresses.
 
 ## API Contract
@@ -120,19 +120,19 @@ Run `npm run build && npm run db:create-indexes` after deploying the schema. Mon
 
 ## Abuse and Leakage Controls
 
-| Threat | Enforced control |
-| --- | --- |
-| Account enumeration | Identical request status, message, shape, database path, and post-response email dispatch behavior |
-| Arbitrary recipient delivery | Active owner lookup plus an independent exact-address invariant immediately before SMTP |
-| OTP guessing | Cryptographic six-digit generation, five total attempts across resends, per-IP verification limit, 10-minute expiry |
-| Email flooding | Five requests per IP and three requests per email hash in 15 minutes; 60-second UI resend delay |
-| Database disclosure | OTPs and all bearer values use purpose-separated HMAC-SHA-256 with a server-only secret |
-| Replay | OTP is removed after verification; reset grant is single-use and removed after the password transaction |
-| Concurrent reset | Conditional MongoDB updates allow only one consumer of a grant |
-| Stolen existing session | All sessions are revoked automatically after reset |
-| Cross-origin abuse | Production unsafe requests require the exact trusted HTTPS origin |
-| Browser leakage | Recovery values exist only in component memory and never enter URLs or browser storage |
-| SMTP downgrade | Authenticated SMTP with TLS 1.2 minimum; production refuses to boot without complete SMTP settings |
+| Threat                       | Enforced control                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Account enumeration          | Identical request status, message, shape, database path, and post-response email dispatch behavior                  |
+| Arbitrary recipient delivery | Active owner lookup plus an independent exact-address invariant immediately before SMTP                             |
+| OTP guessing                 | Cryptographic six-digit generation, five total attempts across resends, per-IP verification limit, 10-minute expiry |
+| Email flooding               | Five requests per IP and three requests per email hash in 15 minutes; 60-second UI resend delay                     |
+| Database disclosure          | OTPs and all bearer values use purpose-separated HMAC-SHA-256 with a server-only secret                             |
+| Replay                       | OTP is removed after verification; reset grant is single-use and removed after the password transaction             |
+| Concurrent reset             | Conditional MongoDB updates allow only one consumer of a grant                                                      |
+| Stolen existing session      | All sessions are revoked automatically after reset                                                                  |
+| Cross-origin abuse           | Production unsafe requests require the exact trusted HTTPS origin                                                   |
+| Browser leakage              | Recovery values exist only in component memory and never enter URLs or browser storage                              |
+| SMTP downgrade               | Authenticated SMTP with TLS 1.2 minimum; production refuses to boot without complete SMTP settings                  |
 
 The flow follows the OWASP Forgot Password guidance for generic responses, secure random single-use values, confirmation, notification, and session invalidation. Email recovery remains dependent on the security of the owner's mailbox; stronger MFA and offline recovery codes remain future hardening options.
 
@@ -151,6 +151,11 @@ SMTP_SECURE=false
 ```
 
 Use `SMTP_SECURE=true` with port `465`; use `false` with port `587` so STARTTLS can upgrade the connection. Production requires both the dedicated reset secret and a complete SMTP configuration. Development can fall back to the invitation secret for local boot only, but production never permits that key reuse.
+
+On Render Free, ports 25, 465, and 587 are blocked. Use a provider that offers
+authenticated SMTP on port 2525 with `SMTP_SECURE=false`; production sets
+`requireTLS` and requires TLS 1.2 or newer before credentials or message content
+are transmitted.
 
 ## Production Verification
 

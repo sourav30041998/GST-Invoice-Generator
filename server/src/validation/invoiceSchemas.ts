@@ -274,7 +274,10 @@ const invoicePayloadBaseSchema = z
     partyAddress: shortText(500).min(1, "Address is required"),
     partyState: shortText(120).min(1, "State is required"),
     groupName: optionalText(160),
-    rooms: z.array(selectedRoomSchema).min(1, "Select at least one room").max(20),
+    rooms: z
+      .array(selectedRoomSchema)
+      .min(1, "Select at least one room")
+      .max(20),
     workflowStatus: invoiceWorkflowStatusSchema
       .optional()
       .default("checkedOut"),
