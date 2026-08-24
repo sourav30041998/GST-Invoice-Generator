@@ -7,6 +7,8 @@ import { InvoiceDraftModel } from "../models/InvoiceDraft.js";
 import { InvoiceModel } from "../models/Invoice.js";
 import { OrganizationModel } from "../models/Organization.js";
 import { OrganizationInvitationModel } from "../models/OrganizationInvitation.js";
+import { PasswordRecoveryChallengeModel } from "../models/PasswordRecoveryChallenge.js";
+import { PasswordRecoveryThrottleModel } from "../models/PasswordRecoveryThrottle.js";
 import { ReferenceDataModel } from "../models/ReferenceData.js";
 import { RoomAllocationModel } from "../models/RoomAllocation.js";
 import { RoomModel } from "../models/Room.js";
@@ -23,6 +25,8 @@ const models = [
   InvoiceModel,
   OrganizationModel,
   OrganizationInvitationModel,
+  PasswordRecoveryChallengeModel,
+  PasswordRecoveryThrottleModel,
   ReferenceDataModel,
   RoomAllocationModel,
   RoomModel,

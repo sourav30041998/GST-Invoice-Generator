@@ -25,7 +25,14 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z.string().trim().min(1).default("http://localhost:5173"),
   SESSION_SECRET: z.string().optional(),
   INVITATION_TOKEN_SECRET: z.string().min(32),
+  PASSWORD_RESET_SECRET: z.string().min(32).optional(),
   ADMIN_INTERNAL_SHARED_SECRET: z.string().min(32),
+  SMTP_HOST: z.string().trim().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  SMTP_USER: z.string().trim().min(1).optional(),
+  SMTP_PASSWORD: z.string().min(1).optional(),
+  SMTP_FROM: z.string().trim().min(3).max(320).optional(),
+  SMTP_SECURE: booleanStringSchema,
   SESSION_TTL_MINUTES: z.coerce
     .number()
     .int()
@@ -65,8 +72,31 @@ const authRequired = toBoolean(parsedEnv.AUTH_REQUIRED, true);
 const cookieSecure = toBoolean(parsedEnv.COOKIE_SECURE, isProduction);
 const sessionCookieSameSite =
   parsedEnv.SESSION_COOKIE_SAMESITE || "lax";
+const smtpValues = [
+  parsedEnv.SMTP_HOST,
+  parsedEnv.SMTP_PORT,
+  parsedEnv.SMTP_USER,
+  parsedEnv.SMTP_PASSWORD,
+  parsedEnv.SMTP_FROM,
+];
+const smtpConfigured = smtpValues.every(Boolean);
+const passwordResetSecret =
+  parsedEnv.PASSWORD_RESET_SECRET ||
+  (!isProduction ? parsedEnv.INVITATION_TOKEN_SECRET : undefined);
 if (!clientOrigins.length) {
   throw new Error("CLIENT_ORIGIN must include at least one trusted origin");
+}
+
+if (smtpValues.some(Boolean) && !smtpConfigured) {
+  throw new Error(
+    "SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM must be configured together",
+  );
+}
+
+if (!passwordResetSecret) {
+  throw new Error(
+    "PASSWORD_RESET_SECRET must be a dedicated secret of at least 32 characters",
+  );
 }
 
 if (isProduction) {
@@ -87,6 +117,16 @@ if (isProduction) {
 
   if (!cookieSecure) {
     throw new Error("Production requires COOKIE_SECURE=true");
+  }
+
+  if (!parsedEnv.PASSWORD_RESET_SECRET) {
+    throw new Error(
+      "Production requires a dedicated PASSWORD_RESET_SECRET",
+    );
+  }
+
+  if (!smtpConfigured) {
+    throw new Error("Production requires SMTP email delivery configuration");
   }
 
 }
@@ -110,6 +150,9 @@ export const env = {
   TRUST_PROXY: toBoolean(parsedEnv.TRUST_PROXY, isProduction),
   COOKIE_SECURE: cookieSecure,
   SESSION_COOKIE_SAMESITE: sessionCookieSameSite,
+  PASSWORD_RESET_SECRET: passwordResetSecret,
+  SMTP_CONFIGURED: smtpConfigured,
+  SMTP_SECURE: toBoolean(parsedEnv.SMTP_SECURE, parsedEnv.SMTP_PORT === 465),
   COMPANY_SESSION_COOKIE: isProduction
     ? "__Host-company_session"
     : "qi_company_session",

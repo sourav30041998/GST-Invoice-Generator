@@ -10,6 +10,7 @@ import { UserModel } from "../models/User.js";
 import { hashPassword } from "../services/passwordService.js";
 import { createInitialBusinessProfile } from "../services/settingsService.js";
 import { invitationTokenHash } from "../services/invitationTokenService.js";
+import { newPasswordSchema } from "../validation/authSchemas.js";
 
 const acceptInvitationSchema = z
   .object({
@@ -19,15 +20,7 @@ const acceptInvitationSchema = z
       .min(40)
       .max(128)
       .regex(/^[A-Za-z0-9_-]+$/),
-    password: z
-      .string()
-      .min(12, "Password must be at least 12 characters")
-      .max(128)
-      .refine(
-        (value) =>
-          /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value),
-        "Password must include upper-case, lower-case, and numeric characters",
-      ),
+    password: newPasswordSchema,
   })
   .strict();
 

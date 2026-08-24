@@ -27,6 +27,7 @@ const userSchema = new Schema(
       index: true,
     },
     lastLoginAt: { type: Date },
+    passwordChangedAt: { type: Date },
   },
   { timestamps: true, minimize: false },
 );

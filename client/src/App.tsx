@@ -6,6 +6,7 @@ import { HistoryView } from "./components/HistoryView";
 import { InvoiceForm } from "./components/InvoiceForm";
 import { InvitationAcceptanceView } from "./components/InvitationAcceptanceView";
 import { LoginView } from "./components/LoginView";
+import { PasswordRecoveryView } from "./components/PasswordRecoveryView";
 import { NewInvoiceStart } from "./components/NewInvoiceStart";
 import { RoomDirectoryView } from "./components/RoomDirectoryView";
 import { SettingsView } from "./components/SettingsView";
@@ -47,6 +48,7 @@ export default function App() {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [authRetryKey, setAuthRetryKey] = useState(0);
+  const [authScreen, setAuthScreen] = useState<"login" | "recovery">("login");
   const [nextInvoiceNo, setNextInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(todayIso());
   const [toast, setToast] = useState("");
@@ -120,6 +122,7 @@ export default function App() {
     status: AuthStatus,
     firstAccess = false,
   ) => {
+    setAuthScreen("login");
     setAuthStatus(status);
     try {
       await loadProtectedWorkspace();
@@ -162,6 +165,7 @@ export default function App() {
     setFormHeader(null);
     setInvoiceFormOpen(false);
     setActiveView("create");
+    setAuthScreen("login");
     showToast("Signed out.");
   };
 
@@ -381,10 +385,20 @@ export default function App() {
   }
 
   if (authStatus.authRequired && !authStatus.authenticated) {
+    if (authScreen === "recovery") {
+      return (
+        <>
+          <PasswordRecoveryView onBackToLogin={() => setAuthScreen("login")} />
+          <Toast message={toast} />
+        </>
+      );
+    }
+
     return (
       <>
         <LoginView
           onAuthenticated={handleAuthenticated}
+          onForgotPassword={() => setAuthScreen("recovery")}
           showToast={showToast}
         />
         <Toast message={toast} />
