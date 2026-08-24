@@ -56,6 +56,23 @@ export type AuthStatus = {
   sessionExpiresAt: string | null;
 };
 
+export type PasswordRecoveryRequestResult = {
+  message: string;
+  challengeToken: string;
+  expiresInSeconds: number;
+  resendAfterSeconds: number;
+};
+
+export type PasswordRecoveryVerificationResult = {
+  resetToken: string;
+  expiresInSeconds: number;
+};
+
+export type PasswordRecoveryCompletionResult = {
+  message: string;
+  notificationSent: boolean;
+};
+
 export type InvoiceWorkflowStatus =
   "draft" | "reserved" | "checkedIn" | "checkedOut" | "cancelled";
 export type InvoiceWorkbenchStatus = "all" | InvoiceWorkflowStatus;

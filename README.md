@@ -34,6 +34,7 @@ Backend runs on `http://localhost:5050`.
 - Re-download, edit, cancel, and export invoice records.
 - Upload business preset JSON and logo from the company profile view.
 - Maintain an organization-owned room directory, select one or more available rooms on an invoice, and retain room-allocation history.
+- Recover a Company owner account through a throttled, email OTP password-reset workflow that revokes existing sessions.
 
 ## Company Isolation
 
@@ -43,6 +44,8 @@ Backend runs on `http://localhost:5050`.
 - The company profile and clear-data action affect only the signed-in organization.
 
 See [MULTI_TENANCY.md](./MULTI_TENANCY.md) for the data model, API list, migration procedure, and rollout checklist.
+
+See [PASSWORD_RECOVERY.md](./PASSWORD_RECOVERY.md) for the recovery API contract, MongoDB collections, SMTP setup, threat controls, and production verification plan.
 
 ## Room Inventory and Allocation
 
@@ -88,7 +91,14 @@ AUTH_REQUIRED=true
 SESSION_SECRET=<random secret with 32 or more characters>
 SESSION_TTL_MINUTES=480
 INVITATION_TOKEN_SECRET=<shared 32+ character invitation-token secret>
+PASSWORD_RESET_SECRET=<dedicated random secret with 32 or more characters>
 ADMIN_INTERNAL_SHARED_SECRET=<shared 32+ character internal-service secret>
+SMTP_HOST=<authenticated SMTP host>
+SMTP_PORT=587
+SMTP_USER=<SMTP user>
+SMTP_PASSWORD=<SMTP password or app password>
+SMTP_FROM=GST Invoice Generator <no-reply@example.com>
+SMTP_SECURE=false
 TRUST_PROXY=true
 COOKIE_SECURE=true
 SESSION_COOKIE_SAMESITE=lax

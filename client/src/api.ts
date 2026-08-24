@@ -8,6 +8,9 @@ import type {
   InvoicePayload,
   InvoiceWorkbenchResponse,
   InvoiceWorkbenchStatus,
+  PasswordRecoveryCompletionResult,
+  PasswordRecoveryRequestResult,
+  PasswordRecoveryVerificationResult,
   Preset,
   Room,
   RoomAllocation,
@@ -140,6 +143,37 @@ export const api = {
     setCompanyCsrfToken(status.csrfToken);
     return status;
   },
+  requestPasswordRecovery: (email: string) =>
+    request<PasswordRecoveryRequestResult>("/auth/password-recovery/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  verifyPasswordRecoveryOtp: (challengeToken: string, otp: string) =>
+    request<PasswordRecoveryVerificationResult>(
+      "/auth/password-recovery/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({ challengeToken, otp }),
+      },
+    ),
+  completePasswordRecovery: (
+    challengeToken: string,
+    resetToken: string,
+    newPassword: string,
+    confirmPassword: string,
+  ) =>
+    request<PasswordRecoveryCompletionResult>(
+      "/auth/password-recovery/reset",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          challengeToken,
+          resetToken,
+          newPassword,
+          confirmPassword,
+        }),
+      },
+    ),
   async acceptInvitation(token: string, password: string) {
     const status = await request<AuthStatus>("/invitations/accept", {
       method: "POST",

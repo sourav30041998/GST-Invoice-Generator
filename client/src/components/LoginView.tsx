@@ -6,10 +6,15 @@ import type { AuthStatus } from "../types";
 
 type LoginViewProps = {
   onAuthenticated: (status: AuthStatus) => void;
+  onForgotPassword: () => void;
   showToast: (message: string) => void;
 };
 
-export function LoginView({ onAuthenticated, showToast }: LoginViewProps) {
+export function LoginView({
+  onAuthenticated,
+  onForgotPassword,
+  showToast,
+}: LoginViewProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -63,9 +68,19 @@ export function LoginView({ onAuthenticated, showToast }: LoginViewProps) {
             />
           </label>
 
-          <label className="field">
-            <span>Password</span>
+          <div className="field">
+            <div className="auth-field-heading">
+              <label htmlFor="login-password">Password</label>
+              <button
+                className="auth-text-link"
+                type="button"
+                onClick={onForgotPassword}
+              >
+                Forgot password?
+              </button>
+            </div>
             <input
+              id="login-password"
               className="input"
               type="password"
               autoComplete="current-password"
@@ -73,7 +88,7 @@ export function LoginView({ onAuthenticated, showToast }: LoginViewProps) {
               onChange={(event) => setPassword(event.target.value)}
               required
             />
-          </label>
+          </div>
 
           <button
             className="btn btn-primary btn-large"
