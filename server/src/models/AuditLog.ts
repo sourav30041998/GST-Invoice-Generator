@@ -1,4 +1,5 @@
 import { Schema, model } from "mongoose";
+import { sanitizeAuditData } from "../utils/auditSanitization.js";
 
 const auditLogSchema = new Schema(
   {
@@ -28,5 +29,13 @@ auditLogSchema.index({
   createdAt: -1,
 });
 auditLogSchema.index({ organizationId: 1, action: 1, createdAt: -1 });
+
+auditLogSchema.pre("validate", function sanitizeSnapshots() {
+  this.before = sanitizeAuditData(this.before);
+  this.after = sanitizeAuditData(this.after);
+  if (this.createdBy?.includes("@")) {
+    this.createdBy = "authenticated-user";
+  }
+});
 
 export const AuditLogModel = model("AuditLog", auditLogSchema);

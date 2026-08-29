@@ -29,6 +29,8 @@ services:
         value: "true"
       - key: SESSION_SECRET
         sync: false
+      - key: DATA_ENCRYPTION_KEY
+        sync: false
       - key: INVITATION_TOKEN_SECRET
         sync: false
       - key: PASSWORD_RESET_SECRET
@@ -49,6 +51,8 @@ services:
         value: "false"
       - key: SESSION_TTL_MINUTES
         value: "480"
+      - key: SESSION_IDLE_TTL_MINUTES
+        value: "60"
       - key: TRUST_PROXY
         value: "true"
       - key: COOKIE_SECURE

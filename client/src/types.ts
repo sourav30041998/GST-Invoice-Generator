@@ -35,14 +35,11 @@ export type Settings = {
 };
 
 export type AuthenticatedUser = {
-  id: string;
-  email: string;
   displayName: string;
   role: "owner";
 };
 
 export type CurrentOrganization = {
-  id: string;
   name: string;
   role: "owner";
 };

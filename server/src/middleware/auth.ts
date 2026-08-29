@@ -5,7 +5,11 @@ import { env } from "../config/env.js";
 import { OrganizationModel } from "../models/Organization.js";
 import { SessionModel } from "../models/Session.js";
 import { UserModel } from "../models/User.js";
-import { hashPassword, verifyPassword } from "../services/passwordService.js";
+import {
+  hashPassword,
+  passwordNeedsRehash,
+  verifyPassword,
+} from "../services/passwordService.js";
 import { ApiError } from "./errorHandler.js";
 
 const SESSION_COOKIE = env.COMPANY_SESSION_COOKIE;
@@ -23,6 +27,8 @@ export type UserSessionContext = {
 type AuthContext = UserSessionContext & {
   csrfToken: string;
   expiresAt: Date;
+  absoluteExpiresAt: Date;
+  lastSeenAt: Date;
 };
 
 type SessionRecord = {
@@ -31,6 +37,9 @@ type SessionRecord = {
   organizationId: unknown;
   csrfToken: string;
   expiresAt: Date;
+  absoluteExpiresAt?: Date;
+  lastSeenAt?: Date;
+  createdAt?: Date;
 };
 
 const loginSchema = z
@@ -91,13 +100,13 @@ function parseCookies(req: Request) {
   );
 }
 
-function setSessionCookie(res: Response, token: string) {
+function setSessionCookie(res: Response, token: string, expiresAt: Date) {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: env.COOKIE_SECURE,
     sameSite: env.SESSION_COOKIE_SAMESITE,
     path: "/",
-    maxAge: env.SESSION_TTL_MINUTES * 60 * 1000,
+    maxAge: Math.max(0, expiresAt.getTime() - Date.now()),
   });
 }
 
@@ -110,33 +119,42 @@ function clearSessionCookie(res: Response) {
   });
 }
 
-function expiryDate() {
-  return new Date(Date.now() + env.SESSION_TTL_MINUTES * 60 * 1000);
+function absoluteExpiryDate(from = Date.now()) {
+  return new Date(from + env.SESSION_TTL_MINUTES * 60 * 1000);
+}
+
+function idleExpiryDate(absoluteExpiresAt: Date, from = Date.now()) {
+  return new Date(
+    Math.min(
+      absoluteExpiresAt.getTime(),
+      from + env.SESSION_IDLE_TTL_MINUTES * 60 * 1000,
+    ),
+  );
 }
 
 function userResponse(context: AuthContext) {
   return {
-    id: context.userId,
-    email: context.email,
     displayName: context.displayName,
     role: context.role,
   };
 }
 
-async function createSession(
-  context: Omit<AuthContext, "csrfToken" | "expiresAt">,
-) {
+async function createSession(context: UserSessionContext) {
   const token = randomToken();
   const csrfToken = randomToken();
-  const expiresAt = expiryDate();
+  const now = new Date();
+  const absoluteExpiresAt = absoluteExpiryDate(now.getTime());
+  const expiresAt = idleExpiryDate(absoluteExpiresAt, now.getTime());
   await SessionModel.create({
     tokenHash: hashToken(token),
     userId: context.userId,
     organizationId: context.organizationId,
     csrfToken,
     expiresAt,
+    absoluteExpiresAt,
+    lastSeenAt: now,
   });
-  return { token, csrfToken, expiresAt };
+  return { token, csrfToken, expiresAt, absoluteExpiresAt, lastSeenAt: now };
 }
 
 async function readSession(req: Request): Promise<AuthContext | null> {
@@ -153,6 +171,14 @@ async function readSession(req: Request): Promise<AuthContext | null> {
   }
 
   if (session.expiresAt <= new Date()) {
+    await SessionModel.deleteOne({ _id: session._id });
+    return null;
+  }
+
+  const absoluteExpiresAt =
+    session.absoluteExpiresAt ||
+    absoluteExpiryDate(session.createdAt?.getTime() || Date.now());
+  if (absoluteExpiresAt <= new Date()) {
     await SessionModel.deleteOne({ _id: session._id });
     return null;
   }
@@ -184,6 +210,8 @@ async function readSession(req: Request): Promise<AuthContext | null> {
     role: "owner",
     csrfToken: session.csrfToken,
     expiresAt: session.expiresAt,
+    absoluteExpiresAt,
+    lastSeenAt: session.lastSeenAt || session.createdAt || new Date(),
   };
 }
 
@@ -197,13 +225,24 @@ async function extendSession(
     return;
   }
 
-  const expiresAt = expiryDate();
+  const now = new Date();
+  if (now.getTime() - context.lastSeenAt.getTime() < 5 * 60 * 1000) {
+    return;
+  }
+  const expiresAt = idleExpiryDate(context.absoluteExpiresAt, now.getTime());
   await SessionModel.updateOne(
     { tokenHash: hashToken(token), userId: context.userId },
-    { $set: { expiresAt } },
+    {
+      $set: {
+        expiresAt,
+        absoluteExpiresAt: context.absoluteExpiresAt,
+        lastSeenAt: now,
+      },
+    },
   );
   context.expiresAt = expiresAt;
-  setSessionCookie(res, token);
+  context.lastSeenAt = now;
+  setSessionCookie(res, token, expiresAt);
 }
 
 function authResponse(context: AuthContext | null) {
@@ -213,7 +252,6 @@ function authResponse(context: AuthContext | null) {
     user: context ? userResponse(context) : null,
     organization: context
       ? {
-          id: context.organizationId,
           name: context.organizationName,
           role: context.role,
         }
@@ -228,12 +266,14 @@ export async function sendUserSession(
   context: UserSessionContext,
 ) {
   const session = await createSession(context);
-  setSessionCookie(res, session.token);
+  setSessionCookie(res, session.token, session.expiresAt);
   res.json(
     authResponse({
       ...context,
       csrfToken: session.csrfToken,
       expiresAt: session.expiresAt,
+      absoluteExpiresAt: session.absoluteExpiresAt,
+      lastSeenAt: session.lastSeenAt,
     }),
   );
 }
@@ -268,6 +308,11 @@ export const login: RequestHandler = async (req, res, next) => {
       : await hashPassword(credentials.password).then(() => false);
     if (!user || !validPassword) {
       throw new ApiError(401, "Invalid email or password");
+    }
+
+    if (passwordNeedsRehash(user.passwordHash)) {
+      user.passwordHash = await hashPassword(credentials.password);
+      user.passwordChangedAt = new Date();
     }
 
     const organization = await OrganizationModel.findOne({

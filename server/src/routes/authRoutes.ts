@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import {
   authStatus,
@@ -12,6 +13,7 @@ import {
   resetRecoveredPassword,
   verifyPasswordRecoveryCode,
 } from "../controllers/passwordRecoveryController.js";
+import { env } from "../config/env.js";
 
 const router = Router();
 
@@ -20,6 +22,24 @@ const loginLimiter = rateLimit({
   limit: 8,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { message: "Too many login attempts. Try again later." },
+});
+
+const accountLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const email =
+      typeof req.body?.email === "string"
+        ? req.body.email.trim().toLowerCase()
+        : "invalid";
+    return crypto
+      .createHmac("sha256", env.SESSION_SECRET || "")
+      .update(email)
+      .digest("hex");
+  },
   message: { message: "Too many login attempts. Try again later." },
 });
 
@@ -48,7 +68,7 @@ const recoveryResetLimiter = rateLimit({
 });
 
 router.get("/me", authStatus);
-router.post("/login", loginLimiter, login);
+router.post("/login", loginLimiter, accountLoginLimiter, login);
 router.post(
   "/password-recovery/request",
   recoveryRequestLimiter,

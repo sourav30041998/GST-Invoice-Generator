@@ -52,7 +52,7 @@ if (env.TRUST_PROXY) {
 
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginResourcePolicy: { policy: "same-origin" },
   }),
 );
 app.use(

@@ -79,6 +79,7 @@ const invoiceDraftSchema = new Schema(
     netTotal: { type: Number, default: 0 },
     presetSnapshot: { type: Schema.Types.Mixed, required: true },
     businessSnapshot: { type: Schema.Types.Mixed, required: true },
+    protectedData: { type: String, select: false },
     createdBy: { type: String, default: "system", trim: true },
     createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
   },
@@ -91,11 +92,4 @@ invoiceDraftSchema.index({
   workflowStatus: 1,
   createdAt: -1,
 });
-invoiceDraftSchema.index({
-  organizationId: 1,
-  partyName: "text",
-  roomNo: "text",
-  confirmNo: "text",
-});
-
 export const InvoiceDraftModel = model("InvoiceDraft", invoiceDraftSchema);

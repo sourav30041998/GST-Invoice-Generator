@@ -20,6 +20,10 @@ import type {
 } from "../validation/invoiceSchemas.js";
 import { getBusinessProfileSnapshot } from "./settingsService.js";
 import {
+  protectInvoiceRecord,
+  revealInvoiceRecord,
+} from "./protectedRecordService.js";
+import {
   resolveRoomSnapshots,
   syncRoomAllocations,
   type RoomSnapshot,
@@ -112,14 +116,30 @@ function documentVersion(document: unknown) {
   return typeof source?.__v === "number" ? source.__v : 0;
 }
 
-function toResponseDocument(document: AuditDocument | null | undefined) {
+function toResponseDocument(
+  document: AuditDocument | null | undefined,
+  scope: "invoice" | "invoice-draft",
+  organizationId: string,
+) {
   const plain = toPlainDocument(document) as Record<string, unknown> | null;
   if (!plain) {
     return plain;
   }
 
+  const revealed = revealInvoiceRecord(scope, plain, organizationId);
+  const {
+    organizationId: _organizationId,
+    businessProfileId: _businessProfileId,
+    businessSnapshot: _businessSnapshot,
+    sourceDraftId: _sourceDraftId,
+    createdBy: _createdBy,
+    createdByUserId: _createdByUserId,
+    protectedData: _protectedData,
+    __v: _documentVersion,
+    ...clientRecord
+  } = revealed;
   return {
-    ...plain,
+    ...clientRecord,
     version: typeof plain.__v === "number" ? plain.__v : 0,
   };
 }
@@ -141,7 +161,7 @@ async function writeAuditLog(
     action,
     before,
     after,
-    createdBy: tenant.userEmail,
+    createdBy: `user:${tenant.userId}`,
   };
 
   if (session) {
@@ -229,7 +249,7 @@ function buildInvoiceDocument(
     businessProfileId: snapshots.businessProfileId,
     presetSnapshot: snapshots.presetSnapshot,
     businessSnapshot: snapshots.businessSnapshot,
-    createdBy: tenant.userEmail,
+    createdBy: `user:${tenant.userId}`,
     createdByUserId: tenant.userId,
   };
 }
@@ -281,7 +301,7 @@ export async function createInvoice(
       rooms,
     );
     const createdInvoice = new InvoiceModel({
-      ...document,
+      ...protectInvoiceRecord("invoice", document, tenant.organizationId),
       ...numbering,
       status: "active",
       recordStatus: "active",
@@ -309,7 +329,7 @@ export async function createInvoice(
       toPlainDocument(createdInvoice),
       session,
     );
-    return toResponseDocument(createdInvoice);
+    return toResponseDocument(createdInvoice, "invoice", tenant.organizationId);
   });
   return invoice;
 }
@@ -336,7 +356,9 @@ export async function createInvoiceDraft(
       snapshots,
       rooms,
     );
-    const draft = new InvoiceDraftModel(document);
+    const draft = new InvoiceDraftModel(
+      protectInvoiceRecord("invoice-draft", document, tenant.organizationId),
+    );
     await draft.save({ session });
     await writeAuditLog(
       tenant,
@@ -347,7 +369,7 @@ export async function createInvoiceDraft(
       toPlainDocument(draft),
       session,
     );
-    return toResponseDocument(draft);
+    return toResponseDocument(draft, "invoice-draft", tenant.organizationId);
   });
 }
 
@@ -365,14 +387,24 @@ export async function updateInvoiceDraft(
       const draft = await InvoiceDraftModel.findOne({
         _id: draftId,
         organizationId: tenant.organizationId,
-      }).session(session);
+      })
+        .select("+protectedData")
+        .session(session);
       if (!draft) {
         throw new ApiError(404, "Draft not found");
       }
       assertExpectedVersion(documentVersion(draft), version, "Draft");
 
       const before = toPlainDocument(draft);
-      const snapshots = await resolveSnapshots(tenant, draft as SnapshotSource);
+      const revealedDraft = revealInvoiceRecord(
+        "invoice-draft",
+        toPlainDocument(draft) as Record<string, unknown>,
+        tenant.organizationId,
+      );
+      const snapshots = await resolveSnapshots(
+        tenant,
+        revealedDraft as SnapshotSource,
+      );
       const invDate =
         invoicePayload.invDate || draft.invDate || todayLocalIso();
       const rooms = await resolveRoomSnapshots(
@@ -388,7 +420,14 @@ export async function updateInvoiceDraft(
           snapshots,
           rooms,
         );
-        Object.assign(draft, document);
+        Object.assign(
+          draft,
+          protectInvoiceRecord(
+            "invoice-draft",
+            document,
+            tenant.organizationId,
+          ),
+        );
         await draft.save({ session });
         await writeAuditLog(
           tenant,
@@ -399,7 +438,11 @@ export async function updateInvoiceDraft(
           toPlainDocument(draft),
           session,
         );
-        return toResponseDocument(draft);
+        return toResponseDocument(
+          draft,
+          "invoice-draft",
+          tenant.organizationId,
+        );
       }
 
       const numbering = await consumeInvoiceNumber(
@@ -417,7 +460,7 @@ export async function updateInvoiceDraft(
       const [invoice] = await InvoiceModel.create(
         [
           {
-            ...document,
+            ...protectInvoiceRecord("invoice", document, tenant.organizationId),
             ...numbering,
             sourceDraftId: draft._id,
             status: "active",
@@ -459,7 +502,7 @@ export async function updateInvoiceDraft(
         toPlainDocument(invoice),
         session,
       );
-      return toResponseDocument(invoice);
+      return toResponseDocument(invoice, "invoice", tenant.organizationId);
     });
 
     if (!result) {
@@ -475,23 +518,31 @@ export async function listInvoiceDrafts(tenant: TenantContext) {
   const drafts = await InvoiceDraftModel.find({
     organizationId: tenant.organizationId,
   })
+    .select("+protectedData")
     .sort({ createdAt: -1 })
     .lean();
-  return drafts.map((draft) => ({
-    _id: draft._id,
-    invDate: draft.invDate,
-    partyName: draft.partyName,
-    netTotal: draft.netTotal,
-    totalCGST: draft.totalCGST,
-    totalSGST: draft.totalSGST,
-    totalIGST: draft.totalIGST,
-    items: draft.lineItems.length,
-    status: "active",
-    workflowStatus: "draft" as const,
-    version: documentVersion(draft),
-    createdAt: draft.createdAt,
-    updatedAt: draft.updatedAt,
-  }));
+  return drafts.map((storedDraft) => {
+    const draft = revealInvoiceRecord(
+      "invoice-draft",
+      storedDraft,
+      tenant.organizationId,
+    );
+    return {
+      _id: draft._id,
+      invDate: draft.invDate,
+      partyName: draft.partyName,
+      netTotal: draft.netTotal,
+      totalCGST: draft.totalCGST,
+      totalSGST: draft.totalSGST,
+      totalIGST: draft.totalIGST,
+      items: draft.lineItems.length,
+      status: "active",
+      workflowStatus: "draft" as const,
+      version: documentVersion(storedDraft),
+      createdAt: draft.createdAt,
+      updatedAt: draft.updatedAt,
+    };
+  });
 }
 
 export async function getInvoiceDraft(tenant: TenantContext, draftId: string) {
@@ -499,11 +550,13 @@ export async function getInvoiceDraft(tenant: TenantContext, draftId: string) {
   const draft = await InvoiceDraftModel.findOne({
     _id: draftId,
     organizationId: tenant.organizationId,
-  }).lean();
+  })
+    .select("+protectedData")
+    .lean();
   if (!draft) {
     throw new ApiError(404, "Draft not found");
   }
-  return toResponseDocument(draft);
+  return toResponseDocument(draft, "invoice-draft", tenant.organizationId);
 }
 
 export async function deleteInvoiceDraft(
@@ -519,7 +572,9 @@ export async function deleteInvoiceDraft(
       const draft = await InvoiceDraftModel.findOne({
         _id: draftId,
         organizationId: tenant.organizationId,
-      }).session(session);
+      })
+        .select("+protectedData")
+        .session(session);
       if (!draft) {
         throw new ApiError(404, "Draft not found");
       }
@@ -572,7 +627,9 @@ export async function updateInvoice(
     const invoice = await InvoiceModel.findOne({
       organizationId: tenant.organizationId,
       invNo,
-    }).session(session);
+    })
+      .select("+protectedData")
+      .session(session);
     if (!invoice) {
       throw new ApiError(404, "Invoice not found");
     }
@@ -583,7 +640,15 @@ export async function updateInvoice(
     );
 
     const before = toPlainDocument(invoice);
-    const snapshots = await resolveSnapshots(tenant, invoice as SnapshotSource);
+    const revealedInvoice = revealInvoiceRecord(
+      "invoice",
+      toPlainDocument(invoice) as Record<string, unknown>,
+      tenant.organizationId,
+    );
+    const snapshots = await resolveSnapshots(
+      tenant,
+      revealedInvoice as SnapshotSource,
+    );
     const rooms = await resolveRoomSnapshots(
       tenant,
       invoicePayload.rooms.map((room) => room.roomId),
@@ -599,7 +664,10 @@ export async function updateInvoice(
       snapshots,
       rooms,
     );
-    Object.assign(invoice, { ...document, recordStatus: invoice.status });
+    Object.assign(invoice, {
+      ...protectInvoiceRecord("invoice", document, tenant.organizationId),
+      recordStatus: invoice.status,
+    });
     await invoice.save({ session });
     await syncRoomAllocations(
       tenant,
@@ -622,7 +690,7 @@ export async function updateInvoice(
       toPlainDocument(invoice),
       session,
     );
-    return toResponseDocument(invoice);
+    return toResponseDocument(invoice, "invoice", tenant.organizationId);
   });
 }
 
@@ -641,13 +709,6 @@ function invoiceFilters(tenant: TenantContext, query: InvoiceQuery) {
   }
   if (query.workflowStatus) {
     filters.workflowStatus = query.workflowStatus;
-  }
-  if (query.search) {
-    const escaped = query.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    filters.$or = [
-      { invNo: new RegExp(escaped, "i") },
-      { partyName: new RegExp(escaped, "i") },
-    ];
   }
   return filters;
 }
@@ -669,14 +730,27 @@ function matchesGstFilter(
 
 export async function listInvoices(tenant: TenantContext, query: InvoiceQuery) {
   const invoices = await InvoiceModel.find(invoiceFilters(tenant, query))
+    .select("+protectedData")
     .sort({ createdAt: -1 })
     .lean();
   return invoices
-    .filter((invoice) => matchesGstFilter(invoice, query.gst))
     .map((invoice) => ({
+      stored: invoice,
+      revealed: revealInvoiceRecord("invoice", invoice, tenant.organizationId),
+    }))
+    .filter(({ revealed }) => {
+      const search = query.search?.toLowerCase();
+      return (
+        matchesGstFilter(revealed, query.gst) &&
+        (!search ||
+          revealed.invNo.toLowerCase().includes(search) ||
+          revealed.partyName.toLowerCase().includes(search))
+      );
+    })
+    .map(({ stored: invoice, revealed }) => ({
       invNo: invoice.invNo,
       invDate: invoice.invDate,
-      partyName: invoice.partyName,
+      partyName: revealed.partyName,
       netTotal: invoice.netTotal,
       totalCGST: invoice.totalCGST,
       totalSGST: invoice.totalSGST,
@@ -762,12 +836,30 @@ export async function getInvoice(tenant: TenantContext, invNo: string) {
   const invoice = await InvoiceModel.findOne({
     organizationId: tenant.organizationId,
     invNo,
-  }).lean();
+  })
+    .select("+protectedData")
+    .lean();
   if (!invoice) {
     throw new ApiError(404, "Invoice not found");
   }
+  const revealed = revealInvoiceRecord(
+    "invoice",
+    invoice,
+    tenant.organizationId,
+  );
+  const {
+    organizationId: _organizationId,
+    businessProfileId: _businessProfileId,
+    businessSnapshot: _businessSnapshot,
+    sourceDraftId: _sourceDraftId,
+    createdBy: _createdBy,
+    createdByUserId: _createdByUserId,
+    protectedData: _protectedData,
+    __v: _documentVersion,
+    ...clientRecord
+  } = revealed;
   return {
-    ...invoice,
+    ...clientRecord,
     version: documentVersion(invoice),
     workflowStatus: defaultWorkflowStatus(invoice),
     recordStatus: invoice.recordStatus || invoice.status,
@@ -786,7 +878,9 @@ export async function cancelInvoice(
       const invoice = await InvoiceModel.findOne({
         organizationId: tenant.organizationId,
         invNo,
-      }).session(session);
+      })
+        .select("+protectedData")
+        .session(session);
       if (!invoice) {
         throw new ApiError(404, "Invoice not found");
       }
@@ -822,7 +916,7 @@ export async function cancelInvoice(
         toPlainDocument(invoice),
         session,
       );
-      return toResponseDocument(invoice);
+      return toResponseDocument(invoice, "invoice", tenant.organizationId);
     });
 
     if (!result) {
@@ -841,14 +935,27 @@ export async function exportInvoicesCsv(
   const invoices = await InvoiceModel.find(
     invoiceFilters(tenant, { ...query, status: query.status || "active" }),
   )
+    .select("+protectedData")
     .sort({ invDate: -1 })
     .lean();
   const rows = invoices
-    .filter((invoice) => matchesGstFilter(invoice, query.gst))
-    .map((invoice) => [
+    .map((invoice) => ({
+      stored: invoice,
+      revealed: revealInvoiceRecord("invoice", invoice, tenant.organizationId),
+    }))
+    .filter(({ revealed }) => {
+      const search = query.search?.toLowerCase();
+      return (
+        matchesGstFilter(revealed, query.gst) &&
+        (!search ||
+          revealed.invNo.toLowerCase().includes(search) ||
+          revealed.partyName.toLowerCase().includes(search))
+      );
+    })
+    .map(({ stored: invoice, revealed }) => [
       invoice.invNo,
       invoice.invDate,
-      invoice.partyName,
+      revealed.partyName,
       invoice.totalCGST.toFixed(2),
       invoice.totalSGST.toFixed(2),
       invoice.totalIGST.toFixed(2),

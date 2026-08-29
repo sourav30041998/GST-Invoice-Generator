@@ -72,6 +72,7 @@ const businessProfileSchema = new Schema(
       uppercase: true,
     },
     bankDetails: { type: bankDetailsSchema, default: () => ({}) },
+    protectedData: { type: String, select: false },
     taxPresets: {
       type: [taxPresetSchema],
       default: [],

@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import crypto from "node:crypto";
 import path from "node:path";
 import { z } from "zod";
 
@@ -25,6 +26,7 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z.string().trim().min(1).default("http://localhost:5173"),
   COMPANY_APP_ORIGIN: z.string().trim().min(1).optional(),
   SESSION_SECRET: z.string().optional(),
+  DATA_ENCRYPTION_KEY: z.string().trim().optional(),
   INVITATION_TOKEN_SECRET: z.string().min(32),
   PASSWORD_RESET_SECRET: z.string().min(32).optional(),
   ADMIN_INTERNAL_SHARED_SECRET: z.string().min(32),
@@ -49,6 +51,12 @@ const envSchema = z.object({
     .positive()
     .max(1440)
     .default(480),
+  SESSION_IDLE_TTL_MINUTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(480)
+    .default(60),
   AUTH_REQUIRED: booleanStringSchema,
   TRUST_PROXY: booleanStringSchema,
   COOKIE_SECURE: booleanStringSchema,
@@ -93,6 +101,22 @@ const smtpConfigured = smtpValues.every(Boolean);
 const passwordResetSecret =
   parsedEnv.PASSWORD_RESET_SECRET ||
   (!isProduction ? parsedEnv.INVITATION_TOKEN_SECRET : undefined);
+
+function decodeEncryptionKey(value: string | undefined) {
+  if (!value || !/^[A-Za-z0-9_-]{43}$/.test(value)) {
+    return undefined;
+  }
+  try {
+    const key = Buffer.from(value, "base64url");
+    return key.length === 32 ? key : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const configuredEncryptionKey = decodeEncryptionKey(
+  parsedEnv.DATA_ENCRYPTION_KEY,
+);
 if (!clientOrigins.length) {
   throw new Error("CLIENT_ORIGIN must include at least one trusted origin");
 }
@@ -165,6 +189,12 @@ if (isProduction) {
     throw new Error("Production requires a dedicated PASSWORD_RESET_SECRET");
   }
 
+  if (!configuredEncryptionKey) {
+    throw new Error(
+      "Production DATA_ENCRYPTION_KEY must be a Base64URL-encoded 32-byte key",
+    );
+  }
+
   if (!smtpConfigured) {
     throw new Error("Production requires SMTP email delivery configuration");
   }
@@ -174,6 +204,7 @@ if (isProduction) {
     parsedEnv.INVITATION_TOKEN_SECRET,
     parsedEnv.PASSWORD_RESET_SECRET,
     parsedEnv.ADMIN_INTERNAL_SHARED_SECRET,
+    parsedEnv.DATA_ENCRYPTION_KEY,
   ].filter((value): value is string => Boolean(value));
   if (
     productionSecrets.some((value) =>
@@ -195,6 +226,17 @@ if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET.length < 32) {
   throw new Error("SESSION_SECRET must be at least 32 characters");
 }
 
+if (parsedEnv.SESSION_IDLE_TTL_MINUTES > parsedEnv.SESSION_TTL_MINUTES) {
+  throw new Error("SESSION_IDLE_TTL_MINUTES cannot exceed SESSION_TTL_MINUTES");
+}
+
+const dataEncryptionKey =
+  configuredEncryptionKey ||
+  crypto
+    .createHash("sha256")
+    .update(`development-only:${parsedEnv.SESSION_SECRET}`)
+    .digest();
+
 if (sessionCookieSameSite === "none" && !cookieSecure) {
   throw new Error("SESSION_COOKIE_SAMESITE=none requires COOKIE_SECURE=true");
 }
@@ -208,6 +250,7 @@ export const env = {
   COOKIE_SECURE: cookieSecure,
   SESSION_COOKIE_SAMESITE: sessionCookieSameSite,
   PASSWORD_RESET_SECRET: passwordResetSecret,
+  DATA_ENCRYPTION_KEY_BYTES: dataEncryptionKey,
   SMTP_CONFIGURED: smtpConfigured,
   SMTP_SECURE: toBoolean(parsedEnv.SMTP_SECURE, parsedEnv.SMTP_PORT === 465),
   COMPANY_SESSION_COOKIE: isProduction
