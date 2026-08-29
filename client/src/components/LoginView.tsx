@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowRight, Building2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { api } from "../api";
 import type { AuthStatus } from "../types";
@@ -16,14 +16,20 @@ export function LoginView({
   showToast,
 }: LoginViewProps) {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
+    const passwordInput = passwordRef.current;
+    const password = passwordInput?.value || "";
+    const loginRequest = api.login(email, password);
+    if (passwordInput) {
+      passwordInput.value = "";
+    }
     try {
-      onAuthenticated(await api.login(email, password));
+      onAuthenticated(await loginRequest);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not sign in.");
     } finally {
@@ -84,8 +90,7 @@ export function LoginView({
               className="input"
               type="password"
               autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              ref={passwordRef}
               required
             />
           </div>

@@ -10,7 +10,8 @@
     "test": "tsx --test src/utils/*.test.ts",
     "start": "node dist/server.js",
     "db:create-indexes": "node dist/scripts/createIndexes.js",
-    "db:migrate-single-company-tenancy": "node dist/scripts/migrateSingleCompanyTenancy.js"
+    "db:migrate-single-company-tenancy": "node dist/scripts/migrateSingleCompanyTenancy.js",
+    "db:encrypt-sensitive-data": "node dist/scripts/encryptSensitiveData.js"
   },
   "dependencies": {
     "compression": "^1.7.4",

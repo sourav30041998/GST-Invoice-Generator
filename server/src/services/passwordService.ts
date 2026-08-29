@@ -1,21 +1,35 @@
 import crypto from "node:crypto";
 
 const KEY_LENGTH = 64;
-const COST = 16_384;
+const COST = 32_768;
 const BLOCK_SIZE = 8;
-const PARALLELIZATION = 1;
-const MAX_MEMORY = 64 * 1024 * 1024;
+const PARALLELIZATION = 3;
+const MAX_MEMORY = 128 * 1024 * 1024;
 
-function deriveKey(password: string, salt: string) {
+type ScryptParameters = {
+  cost: number;
+  blockSize: number;
+  parallelization: number;
+};
+
+function deriveKey(
+  password: string,
+  salt: string,
+  parameters: ScryptParameters = {
+    cost: COST,
+    blockSize: BLOCK_SIZE,
+    parallelization: PARALLELIZATION,
+  },
+) {
   return new Promise<Buffer>((resolve, reject) => {
     crypto.scrypt(
       password,
       salt,
       KEY_LENGTH,
       {
-        N: COST,
-        r: BLOCK_SIZE,
-        p: PARALLELIZATION,
+        N: parameters.cost,
+        r: parameters.blockSize,
+        p: parameters.parallelization,
         maxmem: MAX_MEMORY,
       },
       (error, derivedKey) => {
@@ -45,22 +59,40 @@ export async function hashPassword(password: string) {
 export async function verifyPassword(password: string, storedHash: string) {
   const [algorithm, cost, blockSize, parallelization, salt, encodedKey] =
     storedHash.split("$");
-  if (
-    algorithm !== "scrypt" ||
-    cost !== String(COST) ||
-    blockSize !== String(BLOCK_SIZE) ||
-    parallelization !== String(PARALLELIZATION) ||
-    !salt ||
-    !encodedKey
-  ) {
+  if (algorithm !== "scrypt" || !salt || !encodedKey) {
     return false;
   }
 
   const expected = Buffer.from(encodedKey, "base64url");
-  if (expected.length !== KEY_LENGTH) {
+  const parameters = {
+    cost: Number(cost),
+    blockSize: Number(blockSize),
+    parallelization: Number(parallelization),
+  };
+  if (
+    expected.length !== KEY_LENGTH ||
+    !Number.isInteger(parameters.cost) ||
+    !Number.isInteger(parameters.blockSize) ||
+    !Number.isInteger(parameters.parallelization) ||
+    parameters.cost < 16_384 ||
+    parameters.cost > COST ||
+    parameters.blockSize !== BLOCK_SIZE ||
+    parameters.parallelization < 1 ||
+    parameters.parallelization > PARALLELIZATION
+  ) {
     return false;
   }
 
-  const actual = await deriveKey(password, salt);
+  const actual = await deriveKey(password, salt, parameters);
   return crypto.timingSafeEqual(actual, expected);
+}
+
+export function passwordNeedsRehash(storedHash: string) {
+  const [algorithm, cost, blockSize, parallelization] = storedHash.split("$");
+  return (
+    algorithm !== "scrypt" ||
+    cost !== String(COST) ||
+    blockSize !== String(BLOCK_SIZE) ||
+    parallelization !== String(PARALLELIZATION)
+  );
 }

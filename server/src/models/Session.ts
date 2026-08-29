@@ -17,11 +17,14 @@ const sessionSchema = new Schema(
     },
     csrfToken: { type: String, required: true, select: false },
     expiresAt: { type: Date, required: true },
+    absoluteExpiresAt: { type: Date, required: true },
+    lastSeenAt: { type: Date, required: true },
   },
   { timestamps: true, minimize: false },
 );
 
 sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+sessionSchema.index({ absoluteExpiresAt: 1 }, { expireAfterSeconds: 0 });
 sessionSchema.index({ userId: 1, expiresAt: 1 });
 
 export const SessionModel = model("Session", sessionSchema);

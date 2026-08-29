@@ -103,6 +103,7 @@ const invoiceSchema = new Schema(
     cancelledAt: { type: Date },
     presetSnapshot: { type: Schema.Types.Mixed, required: true },
     businessSnapshot: { type: Schema.Types.Mixed, required: true },
+    protectedData: { type: String, select: false },
     createdBy: { type: String, default: "system", trim: true },
     createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
   },
@@ -130,12 +131,4 @@ invoiceSchema.index(
   },
 );
 invoiceSchema.index({ organizationId: 1, workflowStatus: 1, createdAt: -1 });
-invoiceSchema.index({
-  organizationId: 1,
-  partyName: "text",
-  invNo: "text",
-  roomNo: "text",
-  confirmNo: "text",
-});
-
 export const InvoiceModel = model("Invoice", invoiceSchema);

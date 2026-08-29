@@ -54,7 +54,7 @@ async function writeRoomAudit(
     action,
     before,
     after,
-    createdBy: tenant.userEmail,
+    createdBy: `user:${tenant.userId}`,
   });
 }
 

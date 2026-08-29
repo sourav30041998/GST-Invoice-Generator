@@ -6,6 +6,10 @@ import {
 } from "../config/defaultTaxPresets.js";
 import { BusinessProfileModel } from "../models/BusinessProfile.js";
 import { OrganizationModel } from "../models/Organization.js";
+import {
+  protectBusinessProfileRecord,
+  revealBusinessProfileRecord,
+} from "./protectedRecordService.js";
 import type { PresetPayload } from "../validation/invoiceSchemas.js";
 import type { TaxPresetPreferences } from "../validation/settingsSchemas.js";
 
@@ -37,6 +41,7 @@ type BusinessProfileShape = {
   terms?: string;
   logoDataUrl?: string;
   isActive?: boolean;
+  protectedData?: string;
 };
 
 function profileKey(organizationId: string) {
@@ -142,22 +147,30 @@ function profileToBusinessSnapshot(profile: BusinessProfileShape) {
 }
 
 async function getOrCreateBusinessProfile(organizationId: string) {
+  const initialProfile = protectBusinessProfileRecord(
+    {
+      ...presetToProfile(organizationId, defaultPreset),
+      taxPresets: freshDefaultTaxPresets(),
+    },
+    organizationId,
+  );
   const profile = await BusinessProfileModel.findOneAndUpdate(
     { organizationId },
     {
       $setOnInsert: {
-        ...presetToProfile(organizationId, defaultPreset),
-        taxPresets: freshDefaultTaxPresets(),
+        ...initialProfile,
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
-  ).lean();
+  )
+    .select("+protectedData")
+    .lean();
 
   if (!profile) {
     throw new Error("Could not initialize business profile");
   }
 
-  return profile;
+  return revealBusinessProfileRecord(profile, organizationId);
 }
 
 export async function createInitialBusinessProfile(
@@ -172,12 +185,18 @@ export async function createInitialBusinessProfile(
     email: ownerEmail,
     invoice_prefix: "INV",
   };
+  const initialProfile = protectBusinessProfileRecord(
+    {
+      ...presetToProfile(organizationId, preset),
+      taxPresets: freshDefaultTaxPresets(),
+    },
+    organizationId,
+  );
   await BusinessProfileModel.findOneAndUpdate(
     { organizationId },
     {
       $setOnInsert: {
-        ...presetToProfile(organizationId, preset),
-        taxPresets: freshDefaultTaxPresets(),
+        ...initialProfile,
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true, session },
@@ -229,13 +248,19 @@ export async function savePreset(
   preset: PresetPayload,
 ) {
   const current = await getOrCreateBusinessProfile(organizationId);
+  const protectedProfile = protectBusinessProfileRecord(
+    presetToProfile(organizationId, preset, current.logoDataUrl || ""),
+    organizationId,
+  );
   const profile = await BusinessProfileModel.findOneAndUpdate(
     { organizationId },
     {
-      $set: presetToProfile(organizationId, preset, current.logoDataUrl || ""),
+      $set: protectedProfile,
     },
     { new: true, runValidators: true },
-  ).lean();
+  )
+    .select("+protectedData")
+    .lean();
 
   if (!profile) {
     throw new Error("Could not save business profile");
@@ -250,7 +275,7 @@ export async function savePreset(
       },
     },
   );
-  return profileToPreset(profile);
+  return profileToPreset(revealBusinessProfileRecord(profile, organizationId));
 }
 
 export async function saveTaxPresets(
