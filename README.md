@@ -130,6 +130,18 @@ Before the first deployment of the multi-company branch, follow the one-time mig
 
 Render Free services can sleep after inactivity, so users may need to wait for the first request. MongoDB Atlas Free clusters do not include managed backups; export encrypted backups with `mongodump` on a regular schedule.
 
+## Company Email Connections
+
+Company Profile now includes Gmail send-only authorization and custom-domain
+delivery through each company's own Brevo account. Domains may use any registrar.
+Customer booking/receipt emails require a connected, verified company sender;
+they no longer silently fall back to platform SMTP. Password-recovery and
+invitation emails continue using the platform configuration.
+
+Follow [ORGANIZATION_EMAIL.md](./ORGANIZATION_EMAIL.md) for Google setup, domain
+verification, API contracts, database collections, rollout and security controls.
+Configure Google only in the Company service, not the separate Admin service.
+
 ## GST Rate Notes
 
 The default hotel accommodation presets follow the official GST position identified during the migration: hotel accommodation up to Rs. 7,500 per unit per day is 12%, and above Rs. 7,500 is 18%. Restaurant and non-specified outdoor catering defaults are 5%. Confirm rates with a tax professional before production use.

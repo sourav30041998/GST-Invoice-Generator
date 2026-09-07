@@ -1,5 +1,6 @@
 import type {
   AuthStatus,
+  OrganizationEmailSettings,
   Booking,
   BookingCreateResponse,
   BookingInput,
@@ -206,6 +207,73 @@ export const api = {
     setCompanyCsrfToken(null);
   },
   getSettings: () => request<Settings>("/settings"),
+  getOrganizationEmail: () =>
+    request<OrganizationEmailSettings>("/organization-email"),
+  startGmailConnection: (senderName: string, password: string) =>
+    request<{ authorizationUrl: string }>(
+      "/organization-email/gmail/start",
+      {
+        method: "POST",
+        body: JSON.stringify({ senderName, password }),
+        signal: AbortSignal.timeout(90_000),
+      },
+      companyCsrfToken,
+    ),
+  completeGmailConnection: (code: string, state: string) =>
+    request<OrganizationEmailSettings>(
+      "/organization-email/gmail/complete",
+      {
+        method: "POST",
+        body: JSON.stringify({ code, state }),
+        signal: AbortSignal.timeout(90_000),
+      },
+      companyCsrfToken,
+    ),
+  connectEmailDomain: (input: {
+    senderName: string;
+    senderEmail: string;
+    apiKey: string;
+    password: string;
+  }) =>
+    request<OrganizationEmailSettings>(
+      "/organization-email/domain",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+        signal: AbortSignal.timeout(90_000),
+      },
+      companyCsrfToken,
+    ),
+  verifyEmailDomain: (password: string) =>
+    request<OrganizationEmailSettings>(
+      "/organization-email/domain/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({ password }),
+        signal: AbortSignal.timeout(90_000),
+      },
+      companyCsrfToken,
+    ),
+  testOrganizationEmail: (password: string) =>
+    request<{ message: string }>(
+      "/organization-email/test",
+      {
+        method: "POST",
+        body: JSON.stringify({ password }),
+        signal: AbortSignal.timeout(90_000),
+      },
+      companyCsrfToken,
+    ),
+  disconnectOrganizationEmail: (password: string) =>
+    request<{ message: string }>(
+      "/organization-email",
+      {
+        method: "DELETE",
+        body: JSON.stringify({ password }),
+        signal: AbortSignal.timeout(90_000),
+      },
+      companyCsrfToken,
+    ),
   updatePreset: (preset: Preset) =>
     request<{ preset: Preset }>(
       "/settings/preset",
@@ -359,6 +427,7 @@ export const api = {
           ...input,
           idempotencyKey: input.idempotencyKey || crypto.randomUUID(),
         }),
+        signal: AbortSignal.timeout(90_000),
       },
       companyCsrfToken,
     ),

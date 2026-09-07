@@ -30,6 +30,7 @@ import type {
   Settings,
 } from "./types";
 import { todayIso } from "./utils/dates";
+import { isEmailConnectionReturn } from "./utils/emailConnectionReturn";
 
 const CustomerWorkspaceView = lazy(() =>
   import("./components/CustomerWorkspaceView").then((module) => ({
@@ -55,7 +56,7 @@ export default function App() {
   const invitationToken = new URLSearchParams(
     window.location.hash.replace(/^#/, ""),
   ).get("invite");
-  const [activeView, setActiveView] = useState<ViewName>("create");
+  const [activeView, setActiveView] = useState<ViewName>(isEmailConnectionReturn ? "settings" : "create");
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [dbReady, setDbReady] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);

@@ -476,3 +476,13 @@ export type BookingReceipt = {
   business: Preset;
   logoDataUrl: string | null;
 };
+export type OrganizationEmailSettings = {
+  gmailAvailable: boolean;
+  provider: "gmail" | "brevo" | null;
+  status: "notConnected" | "pending" | "connected" | "reconnectRequired" | "disconnected";
+  senderName: string;
+  senderEmail: string;
+  dnsRecords: Array<{ type: string; host: string; value: string; verified: boolean }>;
+  verifiedAt: string | null;
+  lastAcceptedAt: string | null;
+};

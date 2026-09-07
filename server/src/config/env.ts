@@ -45,6 +45,8 @@ const envSchema = z.object({
     )
     .optional(),
   SMTP_SECURE: booleanStringSchema,
+  GOOGLE_EMAIL_CLIENT_ID: z.string().trim().min(1).optional(),
+  GOOGLE_EMAIL_CLIENT_SECRET: z.string().min(1).optional(),
   WHATSAPP_ACCESS_TOKEN: z
     .string()
     .trim()
@@ -110,6 +112,9 @@ const envSchema = z.object({
 
 const parsedEnv = envSchema.parse(process.env);
 const isProduction = parsedEnv.NODE_ENV === "production";
+if (Boolean(parsedEnv.GOOGLE_EMAIL_CLIENT_ID) !== Boolean(parsedEnv.GOOGLE_EMAIL_CLIENT_SECRET)) {
+  throw new Error("GOOGLE_EMAIL_CLIENT_ID and GOOGLE_EMAIL_CLIENT_SECRET must be configured together");
+}
 
 function toBoolean(value: "true" | "false" | undefined, fallback: boolean) {
   if (value === "true") {
@@ -305,6 +310,8 @@ export const env = {
   PASSWORD_RESET_SECRET: passwordResetSecret,
   DATA_ENCRYPTION_KEY_BYTES: dataEncryptionKey,
   SMTP_CONFIGURED: smtpConfigured,
+  GOOGLE_EMAIL_CONFIGURED: Boolean(parsedEnv.GOOGLE_EMAIL_CLIENT_ID && parsedEnv.GOOGLE_EMAIL_CLIENT_SECRET),
+  GOOGLE_EMAIL_REDIRECT_URI: `${companyAppOrigin}/email-connect`,
   WHATSAPP_CONFIGURED: whatsappConfigured,
   SMTP_SECURE: toBoolean(parsedEnv.SMTP_SECURE, parsedEnv.SMTP_PORT === 465),
   COMPANY_SESSION_COOKIE: isProduction

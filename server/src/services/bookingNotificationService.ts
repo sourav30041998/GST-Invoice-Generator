@@ -14,8 +14,9 @@ import {
 import { encryptProtectedJson } from "./dataProtectionService.js";
 import {
   escapeEmailHtml,
-  sendApplicationEmail,
 } from "./emailTransportService.js";
+import { sendOrganizationEmail } from "./organizationEmailService.js";
+import { OrganizationEmailError } from "./organizationEmailProvider.js";
 import {
   bookingReceiptFilename,
   bookingSlipFilename,
@@ -339,11 +340,6 @@ export async function sendBookingNotifications(
         errorCode = "WHATSAPP_CONSENT_REQUIRED";
         message = "WhatsApp consent is not recorded for this customer.";
       } else if (channel === "email") {
-        if (!env.SMTP_CONFIGURED) {
-          status = "skipped";
-          errorCode = "EMAIL_NOT_CONFIGURED";
-          message = "Email delivery is not configured.";
-        } else {
           const receiptInput = context.payment
             ? {
                 businessName: context.business.business_name,
@@ -390,14 +386,13 @@ export async function sendBookingNotifications(
                   },
                 ]
               : undefined;
-          await sendApplicationEmail({
+          providerReference = await sendOrganizationEmail(tenant.organizationId, {
             to: recipient,
             subject: safeSubject(content.subject),
             text: content.text,
             html: content.html,
             attachments: receiptAttachments,
           });
-        }
       } else {
         providerReference = await sendWhatsAppTemplate({
           kind: payload.kind,
@@ -406,7 +401,11 @@ export async function sendBookingNotifications(
         });
       }
     } catch (error) {
-      if (
+      if (channel === "email" && (error instanceof OrganizationEmailError || error instanceof ApiError)) {
+        status = "failed";
+        errorCode = "EMAIL_CONNECTION_OR_DELIVERY_FAILED";
+        message = error.message;
+      } else if (
         error instanceof WhatsAppDeliveryError &&
         error.code === "NOT_CONFIGURED"
       ) {

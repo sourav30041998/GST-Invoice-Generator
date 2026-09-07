@@ -23,8 +23,12 @@ import { SchemaMigrationModel } from "../models/SchemaMigration.js";
 import { SessionModel } from "../models/Session.js";
 import { SettingModel } from "../models/Setting.js";
 import { UserModel } from "../models/User.js";
+import { OrganizationEmailConnectionModel, EmailOAuthChallengeModel, EmailThrottleModel } from "../models/OrganizationEmailConnection.js";
 
 const models = [
+  OrganizationEmailConnectionModel,
+  EmailOAuthChallengeModel,
+  EmailThrottleModel,
   AuditLogModel,
   BusinessProfileModel,
   BookingModel,

@@ -25,6 +25,7 @@ import internalRoutes from "./routes/internalRoutes.js";
 import referenceDataRoutes from "./routes/referenceDataRoutes.js";
 import roomRoutes from "./routes/roomRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
+import organizationEmailRoutes from "./routes/organizationEmailRoutes.js";
 
 export const app = express();
 
@@ -86,11 +87,17 @@ app.use(
   }),
 );
 app.use("/api", noStoreApiResponses);
+app.use("/email-connect", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+});
 app.use(
   morgan(
     env.NODE_ENV === "production"
       ? ":method :status :response-time ms :res[content-length]"
       : "dev",
+    { skip: (req) => req.path === "/email-connect" },
   ),
 );
 app.use(
@@ -117,6 +124,7 @@ app.use("/api/customers", requireAuth, requireCsrf, customerRoutes);
 app.use("/api/bookings", requireAuth, requireCsrf, bookingRoutes);
 app.use("/api/rooms", requireAuth, requireCsrf, roomRoutes);
 app.use("/api/settings", requireAuth, requireCsrf, settingsRoutes);
+app.use("/api/organization-email", requireAuth, requireCsrf, organizationEmailRoutes);
 app.use("/api/invoices", requireAuth, requireCsrf, invoiceRoutes);
 
 if (env.NODE_ENV === "production") {
@@ -145,7 +153,7 @@ if (env.NODE_ENV === "production") {
       return;
     }
 
-    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Cache-Control", req.path === "/email-connect" ? "no-store" : "no-cache");
     res.sendFile(frontendIndexFile, (error) => {
       if (error) {
         next(error);

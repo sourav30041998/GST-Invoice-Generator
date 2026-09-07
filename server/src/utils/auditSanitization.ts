@@ -32,6 +32,13 @@ const SENSITIVE_KEYS = new Set([
   "searchtokens",
   "termssnapshot",
   "token",
+  "apikey",
+  "refreshtoken",
+  "accesstoken",
+  "idtoken",
+  "codeverifier",
+  "senderemail",
+  "authorizationcode",
 ]);
 
 export function sanitizeAuditData(value: unknown): unknown {

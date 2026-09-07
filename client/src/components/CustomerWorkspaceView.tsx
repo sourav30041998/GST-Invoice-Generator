@@ -733,6 +733,7 @@ export function CustomerWorkspaceView({
   const [deliveryConfirmation, setDeliveryConfirmation] =
     useState<DeliveryConfirmationState | null>(null);
   const [notificationSendingKey, setNotificationSendingKey] = useState("");
+  const [deliveryError, setDeliveryError] = useState("");
   const notificationRetryKeys = useRef(new Map<string, string>());
   const notificationSendingRef = useRef(false);
 
@@ -1054,6 +1055,7 @@ export function CustomerWorkspaceView({
     const sendingKey = `${booking._id}:${channel}`;
     if (notificationSendingRef.current) return false;
     notificationSendingRef.current = true;
+    setDeliveryError("");
     setNotificationSendingKey(sendingKey);
     try {
       const outcome = await sendNotification(
@@ -1061,10 +1063,11 @@ export function CustomerWorkspaceView({
         [channel],
         undefined,
         "confirmation",
-        true,
+        false,
         allowResend,
       );
       if (outcome.succeeded) {
+        showToast(outcome.message);
         const sentAt = new Date().toISOString();
         setBookings((current) =>
           current.map((item) =>
@@ -1082,6 +1085,7 @@ export function CustomerWorkspaceView({
           ),
         );
       }
+      if (!outcome.succeeded) setDeliveryError(outcome.message);
       return outcome.succeeded;
     } finally {
       notificationSendingRef.current = false;
@@ -1093,6 +1097,7 @@ export function CustomerWorkspaceView({
     booking: BookingSummary,
     channel: "email" | "whatsapp",
   ) => {
+    setDeliveryError("");
     setDeliveryConfirmation({ booking, channel });
   };
 
@@ -2573,6 +2578,7 @@ export function CustomerWorkspaceView({
           onClose={() => setDeliveryConfirmation(null)}
         >
           <div className="customer-modal-body resend-confirmation-copy">
+            {deliveryError ? <div className="organization-email-notice is-error" role="alert"><span>{deliveryError}</span><button type="button" aria-label="Dismiss delivery error" onClick={() => setDeliveryError("")}><X size={16} /></button></div> : null}
             <p>
               {(
                 deliveryConfirmation.channel === "email"
