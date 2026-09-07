@@ -23,6 +23,10 @@ const viewMeta: Record<ViewName, { title: string; sub: string }> = {
     title: "Invoice History",
     sub: "Browse, filter, update, cancel, and re-download past invoices",
   },
+  customers: {
+    title: "Customer Desk",
+    sub: "Manage enquiries, confirmed stays, advances, and customer receipts",
+  },
   rooms: {
     title: "Room Directory",
     sub: "Manage rooms available to this organization’s invoices",

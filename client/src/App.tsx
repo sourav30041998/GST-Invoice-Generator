@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { RefreshCw, ShieldAlert } from "lucide-react";
 import { api } from "./api";
 import { AboutView } from "./components/AboutView";
@@ -23,6 +30,12 @@ import type {
   Settings,
 } from "./types";
 import { todayIso } from "./utils/dates";
+
+const CustomerWorkspaceView = lazy(() =>
+  import("./components/CustomerWorkspaceView").then((module) => ({
+    default: module.CustomerWorkspaceView,
+  })),
+);
 
 const defaultSettings: Settings = {
   preset: defaultPreset,
@@ -464,6 +477,21 @@ export default function App() {
               onEdit={handleEdit}
               showToast={showToast}
             />
+          ) : null}
+          {activeView === "customers" ? (
+            <Suspense
+              fallback={
+                <div className="customer-page-lock customer-route-loader">
+                  <div className="orbit-loader"><i /><i /><i /></div>
+                  <strong>Opening customer desk...</strong>
+                </div>
+              }
+            >
+              <CustomerWorkspaceView
+                settings={settings}
+                showToast={showToast}
+              />
+            </Suspense>
           ) : null}
           {activeView === "rooms" ? (
             <RoomDirectoryView

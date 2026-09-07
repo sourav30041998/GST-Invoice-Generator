@@ -9,6 +9,8 @@ type AnyRecord = Record<string, any>;
 type InvoiceSensitiveData = {
   confirmNo: string;
   partyName: string;
+  partyPhone?: string;
+  partyEmail?: string;
   partyGSTIN: string;
   partyAddress: string;
   partyState: string;
@@ -41,6 +43,12 @@ export function protectInvoiceRecord(
   const sensitive: InvoiceSensitiveData = {
     confirmNo: record.confirmNo || "",
     partyName: record.partyName || "",
+    ...(typeof record.partyPhone === "string"
+      ? { partyPhone: record.partyPhone }
+      : {}),
+    ...(typeof record.partyEmail === "string"
+      ? { partyEmail: record.partyEmail }
+      : {}),
     partyGSTIN: record.partyGSTIN || "",
     partyAddress: record.partyAddress || "",
     partyState: record.partyState || "",
@@ -59,6 +67,8 @@ export function protectInvoiceRecord(
       : {}),
     confirmNo: "",
     partyName: "Protected customer",
+    ...(typeof record.partyPhone === "string" ? { partyPhone: "" } : {}),
+    ...(typeof record.partyEmail === "string" ? { partyEmail: "" } : {}),
     partyGSTIN: "",
     partyAddress: "",
     partyState: "",

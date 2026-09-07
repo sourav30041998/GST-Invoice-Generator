@@ -8,7 +8,9 @@ import {
   ListChecks,
   Plus,
   Save,
+  Search,
   Trash2,
+  UserCheck,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,6 +20,8 @@ import { findIndianState, indianStates } from "../data/indianStates";
 import { StateCombobox } from "./StateCombobox";
 import type {
   AdjustmentInput,
+  BookingSummary,
+  Customer,
   CreatableInvoiceWorkflowStatus,
   Invoice,
   InvoiceDraft,
@@ -39,7 +43,7 @@ import { validateInvoiceForm } from "../utils/invoiceValidation";
 
 type FormState = Omit<
   InvoicePayload,
-  "lineItems" | "adjustments" | "workflowStatus"
+  "lineItems" | "adjustments" | "workflowStatus" | "customerProfileSync"
 > & {
   workflowStatus: InvoiceWorkflowStatus;
 };
@@ -72,11 +76,15 @@ type InvoiceFormProps = {
 };
 
 const initialForm = (): FormState => ({
+  customerId: undefined,
+  bookingId: undefined,
   invDate: todayIso(),
   checkinDate: "",
   checkoutDate: "",
   confirmNo: "",
   partyName: "",
+  partyPhone: "",
+  partyEmail: "",
   partyGSTIN: "",
   partyAddress: "",
   partyState: "",
@@ -139,12 +147,16 @@ function cleanPayload(
   form: FormState,
   lineItems: LineItemInput[],
   adjustments: AdjustmentInput[],
+  customerProfileVersion?: number,
 ): InvoicePayload {
   const workflowStatus: CreatableInvoiceWorkflowStatus =
     form.workflowStatus === "cancelled" ? "checkedOut" : form.workflowStatus;
 
   return {
     ...form,
+    ...(customerProfileVersion === undefined
+      ? {}
+      : { customerProfileSync: { version: customerProfileVersion } }),
     workflowStatus,
     lineItems: lineItems.map((line) => ({
       presetKey: line.presetKey,
@@ -172,9 +184,11 @@ function formSnapshot(
   form: FormState,
   lineItems: LineItemInput[],
   adjustments: AdjustmentInput[],
+  profileSyncEnabled = false,
 ) {
   return JSON.stringify({
     form,
+    profileSyncEnabled,
     lineItems: lineItems.map((line) => ({
       presetKey: line.presetKey,
       description: line.description,
@@ -234,6 +248,14 @@ export function InvoiceForm({
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [roomLoadError, setRoomLoadError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null,
+  );
+  const [customerBookings, setCustomerBookings] = useState<BookingSummary[]>(
+    [],
+  );
+  const [customerLookupLoading, setCustomerLookupLoading] = useState(false);
+  const [profileSyncEnabled, setProfileSyncEnabled] = useState(false);
 
   const totals = useMemo(
     () => calculateInvoiceTotals(lineItems, adjustments),
@@ -264,6 +286,9 @@ export function InvoiceForm({
     setActiveTab("details");
     setValidationDialogMessage(null);
     setFieldLimitField(null);
+    setSelectedCustomer(null);
+    setCustomerBookings([]);
+    setProfileSyncEnabled(false);
     tabToRestoreAfterSaveRef.current = null;
   }, [taxPresets]);
 
@@ -306,6 +331,7 @@ export function InvoiceForm({
         form.checkinDate,
         form.checkoutDate,
         editingInvoice?._id,
+        form.bookingId,
       )
       .then((rooms) => {
         if (current) {
@@ -329,7 +355,48 @@ export function InvoiceForm({
     return () => {
       current = false;
     };
-  }, [editingInvoice?._id, form.checkinDate, form.checkoutDate]);
+  }, [
+    editingInvoice?._id,
+    form.bookingId,
+    form.checkinDate,
+    form.checkoutDate,
+  ]);
+
+  useEffect(() => {
+    if (!form.customerId) {
+      setSelectedCustomer(null);
+      setCustomerBookings([]);
+      return;
+    }
+    if (selectedCustomer?._id === form.customerId) {
+      return;
+    }
+    let current = true;
+    void Promise.all([
+      api.getCustomer(form.customerId),
+      api.listBookings(form.customerId, 1),
+    ])
+      .then(([customer, bookingResponse]) => {
+        if (!current) return;
+        setSelectedCustomer(customer);
+        setCustomerBookings(
+          bookingResponse.items.filter(
+            (booking) =>
+              booking.status === "confirmed" &&
+              (!booking.invoiceId || booking._id === form.bookingId),
+          ),
+        );
+      })
+      .catch(() => {
+        if (current) {
+          setSelectedCustomer(null);
+          setCustomerBookings([]);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [form.bookingId, form.customerId, selectedCustomer?._id]);
 
   useEffect(() => {
     if (!fieldLimitField) {
@@ -354,11 +421,15 @@ export function InvoiceForm({
 
     if (editingInvoice) {
       const nextForm: FormState = {
+        customerId: editingInvoice.customerId,
+        bookingId: editingInvoice.bookingId,
         invDate: editingInvoice.invDate,
         checkinDate: editingInvoice.checkinDate || "",
         checkoutDate: editingInvoice.checkoutDate || "",
         confirmNo: editingInvoice.confirmNo || "",
         partyName: editingInvoice.partyName,
+        partyPhone: editingInvoice.partyPhone || "",
+        partyEmail: editingInvoice.partyEmail || "",
         partyGSTIN: editingInvoice.partyGSTIN || "",
         partyAddress: editingInvoice.partyAddress || "",
         partyState: editingInvoice.partyState || "",
@@ -386,17 +457,22 @@ export function InvoiceForm({
       setLastSavedSnapshot(
         formSnapshot(nextForm, nextLineItems, nextAdjustments),
       );
+      setProfileSyncEnabled(false);
       restoreTabAfterSave();
       return;
     }
 
     if (activeDraft) {
       const nextForm: FormState = {
+        customerId: activeDraft.customerId,
+        bookingId: activeDraft.bookingId,
         invDate: activeDraft.invDate,
         checkinDate: activeDraft.checkinDate || "",
         checkoutDate: activeDraft.checkoutDate || "",
         confirmNo: activeDraft.confirmNo || "",
         partyName: activeDraft.partyName,
+        partyPhone: activeDraft.partyPhone || "",
+        partyEmail: activeDraft.partyEmail || "",
         partyGSTIN: activeDraft.partyGSTIN || "",
         partyAddress: activeDraft.partyAddress || "",
         partyState: activeDraft.partyState || "",
@@ -424,6 +500,7 @@ export function InvoiceForm({
       setLastSavedSnapshot(
         formSnapshot(nextForm, nextLineItems, nextAdjustments),
       );
+      setProfileSyncEnabled(false);
       restoreTabAfterSave();
       return;
     }
@@ -436,6 +513,76 @@ export function InvoiceForm({
     value: string,
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const changeCustomerPhone = (value: string) => {
+    setForm((current) => ({
+      ...current,
+      partyPhone: value,
+      ...(current.partyPhone !== value
+        ? { customerId: undefined, bookingId: undefined }
+        : {}),
+    }));
+    setSelectedCustomer(null);
+    setCustomerBookings([]);
+    setProfileSyncEnabled(false);
+  };
+
+  const lookupCustomer = async () => {
+    if (!form.partyPhone.trim()) {
+      setValidationDialogMessage("Enter the customer's phone number first.");
+      return;
+    }
+    setCustomerLookupLoading(true);
+    try {
+      const customer = await api.lookupCustomer(form.partyPhone);
+      const bookingResponse = await api.listBookings(customer._id, 1);
+      setSelectedCustomer(customer);
+      setProfileSyncEnabled(
+        !customer.email || !customer.address || !customer.state,
+      );
+      setCustomerBookings(
+        bookingResponse.items.filter(
+          (booking) => booking.status === "confirmed" && !booking.invoiceId,
+        ),
+      );
+      setForm((current) => ({
+        ...current,
+        customerId: customer._id,
+        bookingId: undefined,
+        partyName: customer.name,
+        partyPhone: customer.phone,
+        partyEmail: customer.email,
+        partyAddress: customer.address,
+        partyState: customer.state,
+      }));
+      showToast("Customer matched and invoice details filled.");
+    } catch (error) {
+      setSelectedCustomer(null);
+      setCustomerBookings([]);
+      setValidationDialogMessage(
+        error instanceof Error ? error.message : "Customer could not be found.",
+      );
+    } finally {
+      setCustomerLookupLoading(false);
+    }
+  };
+
+  const selectCustomerBooking = (bookingId: string) => {
+    const booking = customerBookings.find((item) => item._id === bookingId);
+    if (!booking) {
+      setForm((current) => ({ ...current, bookingId: undefined }));
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      bookingId: booking._id,
+      confirmNo: booking.confirmationNumber,
+      checkinDate: booking.checkinDate,
+      checkoutDate: booking.checkoutDate,
+      rooms: booking.rooms.map((room) => ({ roomId: room.roomId })),
+    }));
+    showToast(`Booking ${booking.confirmationNumber} linked.`);
   };
 
   const toggleRoom = (roomId: string) => {
@@ -489,9 +636,30 @@ export function InvoiceForm({
   };
 
   const currentSnapshot = useMemo(
-    () => formSnapshot(form, lineItems, adjustments),
-    [form, lineItems, adjustments],
+    () => formSnapshot(form, lineItems, adjustments, profileSyncEnabled),
+    [form, lineItems, adjustments, profileSyncEnabled],
   );
+  const customerProfileDifferences = useMemo(() => {
+    if (!selectedCustomer) return [];
+    const differences: string[] = [];
+    const nextEmail = form.partyEmail.trim().toLowerCase();
+    if (
+      nextEmail &&
+      nextEmail !== selectedCustomer.email.trim().toLowerCase()
+    ) {
+      differences.push("email");
+    }
+    if (form.partyAddress.trim() !== selectedCustomer.address.trim()) {
+      differences.push("address");
+    }
+    if (
+      form.partyState.trim().toLowerCase() !==
+      selectedCustomer.state.trim().toLowerCase()
+    ) {
+      differences.push("state");
+    }
+    return differences;
+  }, [form.partyAddress, form.partyEmail, form.partyState, selectedCustomer]);
   const saveState =
     lastSavedSnapshot && currentSnapshot === lastSavedSnapshot
       ? "saved"
@@ -530,12 +698,21 @@ export function InvoiceForm({
     activeDraft?.rooms?.forEach((room) => {
       knownRooms.set(room.roomId, room);
     });
+    customerBookings.forEach((booking) => {
+      booking.rooms.forEach((room) => knownRooms.set(room.roomId, room));
+    });
     return form.rooms.map((room) => ({
       roomId: room.roomId,
       roomNumber: knownRooms.get(room.roomId)?.roomNumber || "Unavailable room",
       roomType: knownRooms.get(room.roomId)?.roomType || "",
     }));
-  }, [activeDraft?.rooms, availableRooms, editingInvoice?.rooms, form.rooms]);
+  }, [
+    activeDraft?.rooms,
+    availableRooms,
+    customerBookings,
+    editingInvoice?.rooms,
+    form.rooms,
+  ]);
   const editingWorkflowStatus =
     editingInvoice?.workflowStatus ||
     (editingInvoice?.status === "cancelled" ? "cancelled" : "checkedOut");
@@ -568,12 +745,27 @@ export function InvoiceForm({
     }
 
     const effectiveStatus = statusVisible ? form.workflowStatus : "draft";
+    const legacyUnlinkedRecord = Boolean(
+      (editingInvoice || activeDraft) &&
+      !(editingInvoice?.customerId || activeDraft?.customerId),
+    );
+    if (!legacyUnlinkedRecord && !form.customerId) {
+      setActiveTab("details");
+      setValidationDialogMessage(
+        "Find and select the customer by phone number before saving.",
+      );
+      return;
+    }
     const requiredValues = [
       ["Invoice Date", form.invDate],
       ["Arrival", form.checkinDate],
       ["Departure", form.checkoutDate],
       ["Rooms", form.rooms.length],
       ["Payee Name", form.partyName],
+      [
+        "Customer Phone",
+        legacyUnlinkedRecord ? "legacy-record" : form.partyPhone,
+      ],
       ["State", form.partyState],
       ["Address", form.partyAddress],
     ];
@@ -625,6 +817,9 @@ export function InvoiceForm({
         { ...form, partyState: selectedState, workflowStatus: effectiveStatus },
         lineItems,
         adjustments,
+        profileSyncEnabled && customerProfileDifferences.length
+          ? selectedCustomer?.version
+          : undefined,
       );
 
       if (!editingInvoice && effectiveStatus === "draft") {
@@ -636,10 +831,38 @@ export function InvoiceForm({
             )
           : await api.createInvoiceDraft(payload);
         const savedDraft = draft as InvoiceDraft;
+        const profileWasSynchronized =
+          profileSyncEnabled && savedDraft.customerProfileVersion !== undefined;
         setDraftId(savedDraft._id);
         setDraftVersion(savedDraft.version);
         setStatusVisible(true);
-        setLastSavedSnapshot(currentSnapshot);
+        setLastSavedSnapshot(
+          profileWasSynchronized
+            ? formSnapshot(
+                {
+                  ...form,
+                  partyState: selectedState,
+                  workflowStatus: effectiveStatus,
+                },
+                lineItems,
+                adjustments,
+              )
+            : currentSnapshot,
+        );
+        if (profileWasSynchronized) {
+          setSelectedCustomer((current) =>
+            current
+              ? {
+                  ...current,
+                  email: form.partyEmail.trim() || current.email,
+                  address: form.partyAddress.trim(),
+                  state: selectedState,
+                  version: savedDraft.customerProfileVersion as number,
+                }
+              : current,
+          );
+          setProfileSyncEnabled(false);
+        }
         onDraftSaved(closeAfterSave);
         showToast("Draft saved without invoice number.");
         return;
@@ -662,10 +885,40 @@ export function InvoiceForm({
         ...(savedInvoice as Invoice),
         workflowStatus: effectiveStatus,
       };
+      const profileWasSynchronized =
+        profileSyncEnabled &&
+        savedInvoiceWithStatus.customerProfileVersion !== undefined;
       setDraftId(null);
       setDraftVersion(null);
       setStatusVisible(true);
-      setLastSavedSnapshot(currentSnapshot);
+      setLastSavedSnapshot(
+        profileWasSynchronized
+          ? formSnapshot(
+              {
+                ...form,
+                partyState: selectedState,
+                workflowStatus: effectiveStatus,
+              },
+              lineItems,
+              adjustments,
+            )
+          : currentSnapshot,
+      );
+      if (profileWasSynchronized) {
+        setSelectedCustomer((current) =>
+          current
+            ? {
+                ...current,
+                email: form.partyEmail.trim() || current.email,
+                address: form.partyAddress.trim(),
+                state: selectedState,
+                version:
+                  savedInvoiceWithStatus.customerProfileVersion as number,
+              }
+            : current,
+        );
+        setProfileSyncEnabled(false);
+      }
       tabToRestoreAfterSaveRef.current = activeTab;
       onSaved(savedInvoiceWithStatus, closeAfterSave);
       showToast(
@@ -925,6 +1178,71 @@ export function InvoiceForm({
                 <FilePlus2 size={16} />
                 <span>Guest / Payee Details</span>
               </div>
+              <div className="invoice-customer-linker">
+                <div className="invoice-customer-search">
+                  <div className="field">
+                    <RequiredLabel>Customer phone</RequiredLabel>
+                    <div className="invoice-phone-search-control">
+                      <input
+                        className="input"
+                        type="tel"
+                        value={form.partyPhone}
+                        maxLength={24}
+                        placeholder="+91 98765 43210"
+                        onChange={(event) =>
+                          changeCustomerPhone(event.target.value)
+                        }
+                      />
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        disabled={customerLookupLoading}
+                        onClick={() => void lookupCustomer()}
+                      >
+                        <Search size={15} />
+                        {customerLookupLoading ? "Finding..." : "Find customer"}
+                      </button>
+                    </div>
+                  </div>
+                  {selectedCustomer ? (
+                    <div className="invoice-customer-match" aria-live="polite">
+                      <UserCheck size={17} />
+                      <span>
+                        <strong>{selectedCustomer.name}</strong>
+                        <small>
+                          {selectedCustomer.email || "No email recorded"}
+                        </small>
+                      </span>
+                      <em>Matched</em>
+                    </div>
+                  ) : (
+                    <p>
+                      Customer details are loaded only after an exact phone
+                      match. Create new contacts from the Customers workspace.
+                    </p>
+                  )}
+                </div>
+                {selectedCustomer && customerBookings.length ? (
+                  <div className="field invoice-booking-link-field">
+                    <label>Confirmed booking</label>
+                    <select
+                      className="input"
+                      value={form.bookingId || ""}
+                      onChange={(event) =>
+                        selectCustomerBooking(event.target.value)
+                      }
+                    >
+                      <option value="">Invoice without booking link</option>
+                      {customerBookings.map((booking) => (
+                        <option key={booking._id} value={booking._id}>
+                          {booking.confirmationNumber} - {booking.checkinDate}{" "}
+                          to {booking.checkoutDate}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+              </div>
               <div className="form-grid">
                 <div className="field span-2">
                   <RequiredLabel>Payee Name</RequiredLabel>
@@ -945,6 +1263,17 @@ export function InvoiceForm({
                     value={form.partyGSTIN}
                     onChange={(event) =>
                       updateForm("partyGSTIN", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label>Customer email</label>
+                  <input
+                    className="input"
+                    type="email"
+                    value={form.partyEmail}
+                    onChange={(event) =>
+                      updateForm("partyEmail", event.target.value)
                     }
                   />
                 </div>
@@ -979,6 +1308,25 @@ export function InvoiceForm({
                   />
                 </div>
               </div>
+              {selectedCustomer && customerProfileDifferences.length ? (
+                <label className="invoice-profile-sync">
+                  <input
+                    type="checkbox"
+                    checked={profileSyncEnabled}
+                    onChange={(event) =>
+                      setProfileSyncEnabled(event.target.checked)
+                    }
+                  />
+                  <span>
+                    <strong>Update current customer profile</strong>
+                    <small>
+                      {customerProfileDifferences.join(", ")} will become the
+                      current contact details. Earlier invoices keep their
+                      original copy.
+                    </small>
+                  </span>
+                </label>
+              ) : null}
             </section>
           </>
         ) : null}

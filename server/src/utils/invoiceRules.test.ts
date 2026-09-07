@@ -46,6 +46,31 @@ test("accepts a valid invoice payload", () => {
   );
 });
 
+test("accepts versioned customer profile sync only for a linked customer", () => {
+  const linkedPayload = {
+    ...validPayload,
+    customerId: "66b5d4a9e1c2f3a4b5c6d7e7",
+    partyPhone: "+919876543210",
+    partyEmail: "guest@example.com",
+    customerProfileSync: { version: 3 },
+  };
+  assert.equal(invoicePayloadSchema.safeParse(linkedPayload).success, true);
+  assert.equal(
+    invoicePayloadSchema.safeParse({
+      ...linkedPayload,
+      customerId: undefined,
+    }).success,
+    false,
+  );
+  assert.equal(
+    invoicePayloadSchema.safeParse({
+      ...linkedPayload,
+      customerProfileSync: { version: -1 },
+    }).success,
+    false,
+  );
+});
+
 test("rejects invalid calendar dates and reverse stays", () => {
   assert.equal(
     invoicePayloadSchema.safeParse({

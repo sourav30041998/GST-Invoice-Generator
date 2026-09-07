@@ -1,5 +1,16 @@
 import type {
   AuthStatus,
+  Booking,
+  BookingCreateResponse,
+  BookingInput,
+  BookingListResponse,
+  BookingNotificationResult,
+  BookingPayment,
+  BookingPaymentInput,
+  BookingReceipt,
+  Customer,
+  CustomerInput,
+  CustomerListResponse,
   Invoice,
   InvoiceDraft,
   InvoiceDraftListItem,
@@ -50,12 +61,23 @@ async function request<T>(
     headers.set("X-CSRF-Token", csrfToken);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    method,
-    credentials: "include",
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      method,
+      credentials: "include",
+      headers,
+      signal: init?.signal || AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error(
+        "The request timed out. Check the connection and try again.",
+      );
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
@@ -162,18 +184,15 @@ export const api = {
     newPassword: string,
     confirmPassword: string,
   ) =>
-    request<PasswordRecoveryCompletionResult>(
-      "/auth/password-recovery/reset",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          challengeToken,
-          resetToken,
-          newPassword,
-          confirmPassword,
-        }),
-      },
-    ),
+    request<PasswordRecoveryCompletionResult>("/auth/password-recovery/reset", {
+      method: "POST",
+      body: JSON.stringify({
+        challengeToken,
+        resetToken,
+        newPassword,
+        confirmPassword,
+      }),
+    }),
   async acceptInvitation(token: string, password: string) {
     const status = await request<AuthStatus>("/invitations/accept", {
       method: "POST",
@@ -215,13 +234,133 @@ export const api = {
     checkinDate: string,
     checkoutDate: string,
     excludeInvoiceId?: string,
+    excludeBookingId?: string,
   ) =>
     request<Room[]>(
       `/rooms/availability${queryString({
         checkinDate,
         checkoutDate,
         excludeInvoiceId,
+        excludeBookingId,
       })}`,
+    ),
+  listCustomers: (
+    search = "",
+    page = 1,
+    status: "active" | "inactive" | "all" = "active",
+  ) =>
+    request<CustomerListResponse>(
+      "/customers/search",
+      {
+        method: "POST",
+        body: JSON.stringify({ search, page, status }),
+      },
+      companyCsrfToken,
+    ),
+  getCustomer: (customerId: string) =>
+    request<Customer>(`/customers/${encodeURIComponent(customerId)}`),
+  lookupCustomer: (phone: string) =>
+    request<Customer>(
+      "/customers/lookup",
+      { method: "POST", body: JSON.stringify({ phone }) },
+      companyCsrfToken,
+    ),
+  createCustomer: (customer: CustomerInput) =>
+    request<Customer>(
+      "/customers",
+      { method: "POST", body: JSON.stringify(customer) },
+      companyCsrfToken,
+    ),
+  updateCustomer: (
+    customerId: string,
+    customer: CustomerInput,
+    version: number,
+  ) =>
+    request<Customer>(
+      `/customers/${encodeURIComponent(customerId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ ...customer, version }),
+      },
+      companyCsrfToken,
+    ),
+  deactivateCustomer: (customerId: string, version: number) =>
+    request<void>(
+      `/customers/${encodeURIComponent(customerId)}`,
+      { method: "DELETE", body: JSON.stringify({ version }) },
+      companyCsrfToken,
+    ),
+  listBookings: (customerId?: string, page = 1, status = "", pageSize = 20) =>
+    request<BookingListResponse>(
+      `/bookings${queryString({
+        customerId,
+        page: String(page),
+        pageSize: String(pageSize),
+        status,
+      })}`,
+    ),
+  getBooking: (bookingId: string) =>
+    request<Booking>(`/bookings/${encodeURIComponent(bookingId)}`),
+  createBooking: (booking: BookingInput) =>
+    request<BookingCreateResponse>(
+      "/bookings",
+      { method: "POST", body: JSON.stringify(booking) },
+      companyCsrfToken,
+    ),
+  updateBooking: (booking: Booking) =>
+    request<Booking>(
+      `/bookings/${encodeURIComponent(booking._id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          checkinDate: booking.checkinDate,
+          checkoutDate: booking.checkoutDate,
+          roomIds: booking.rooms.map((room) => room.roomId),
+          requestedRooms: booking.requestedRooms,
+          guestCount: booking.guestCount,
+          estimatedTotal: booking.estimatedTotal,
+          status: booking.status,
+          notes: booking.notes,
+          terms: booking.termsSnapshot,
+          version: booking.version,
+        }),
+      },
+      companyCsrfToken,
+    ),
+  listBookingPayments: (bookingId: string) =>
+    request<BookingPayment[]>(
+      `/bookings/${encodeURIComponent(bookingId)}/payments`,
+    ),
+  recordBookingPayment: (bookingId: string, payment: BookingPaymentInput) =>
+    request<BookingPayment>(
+      `/bookings/${encodeURIComponent(bookingId)}/payments`,
+      { method: "POST", body: JSON.stringify(payment) },
+      companyCsrfToken,
+    ),
+  getBookingReceipt: (bookingId: string, paymentId: string) =>
+    request<BookingReceipt>(
+      `/bookings/${encodeURIComponent(bookingId)}/payments/${encodeURIComponent(paymentId)}/receipt`,
+    ),
+  sendBookingNotifications: (
+    bookingId: string,
+    input: {
+      kind: "confirmation" | "advanceReceipt" | "cancellation";
+      channels: Array<"email" | "whatsapp">;
+      paymentId?: string;
+      idempotencyKey?: string;
+      allowResend?: boolean;
+    },
+  ) =>
+    request<BookingNotificationResult>(
+      `/bookings/${encodeURIComponent(bookingId)}/notifications`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...input,
+          idempotencyKey: input.idempotencyKey || crypto.randomUUID(),
+        }),
+      },
+      companyCsrfToken,
     ),
   createRoom: (room: RoomInput) =>
     request<Room>(

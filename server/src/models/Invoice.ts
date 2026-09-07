@@ -60,12 +60,16 @@ const invoiceSchema = new Schema(
     invoiceMonth: { type: String, default: "", trim: true, index: true },
     sequenceNo: { type: Number, min: 1 },
     sourceDraftId: { type: Schema.Types.ObjectId, ref: "InvoiceDraft" },
+    customerId: { type: Schema.Types.ObjectId, ref: "Customer", index: true },
+    bookingId: { type: Schema.Types.ObjectId, ref: "Booking", index: true },
     businessProfileId: { type: Schema.Types.ObjectId, ref: "BusinessProfile" },
     invDate: { type: String, required: true },
     checkinDate: { type: String, default: "" },
     checkoutDate: { type: String, default: "" },
     confirmNo: { type: String, default: "" },
     partyName: { type: String, required: true, trim: true },
+    partyPhone: { type: String, default: "" },
+    partyEmail: { type: String, default: "" },
     partyGSTIN: { type: String, default: "" },
     partyAddress: { type: String, default: "" },
     partyState: { type: String, default: "" },
@@ -131,4 +135,11 @@ invoiceSchema.index(
   },
 );
 invoiceSchema.index({ organizationId: 1, workflowStatus: 1, createdAt: -1 });
+invoiceSchema.index(
+  { organizationId: 1, bookingId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { bookingId: { $type: "objectId" } },
+  },
+);
 export const InvoiceModel = model("Invoice", invoiceSchema);

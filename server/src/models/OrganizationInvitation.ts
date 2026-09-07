@@ -52,8 +52,8 @@ organizationInvitationSchema.index(
     name: "unique_open_invitation_per_email",
     unique: true,
     partialFilterExpression: {
-      acceptedAt: { $exists: false },
-      revokedAt: { $exists: false },
+      acceptedAt: null,
+      revokedAt: null,
     },
   },
 );

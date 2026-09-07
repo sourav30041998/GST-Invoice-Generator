@@ -17,6 +17,8 @@ import {
   requireTrustedOrigin,
 } from "./middleware/security.js";
 import authRoutes from "./routes/authRoutes.js";
+import bookingRoutes from "./routes/bookingRoutes.js";
+import customerRoutes from "./routes/customerRoutes.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
 import invitationRoutes from "./routes/invitationRoutes.js";
 import internalRoutes from "./routes/internalRoutes.js";
@@ -111,6 +113,8 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/invitations", invitationRoutes);
 app.use("/api/reference-data", requireAuth, referenceDataRoutes);
+app.use("/api/customers", requireAuth, requireCsrf, customerRoutes);
+app.use("/api/bookings", requireAuth, requireCsrf, bookingRoutes);
 app.use("/api/rooms", requireAuth, requireCsrf, roomRoutes);
 app.use("/api/settings", requireAuth, requireCsrf, settingsRoutes);
 app.use("/api/invoices", requireAuth, requireCsrf, invoiceRoutes);

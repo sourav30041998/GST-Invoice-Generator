@@ -17,3 +17,7 @@ client/.vite/
 *.tsbuildinfo
 client/vite.config.js
 client/vite.config.d.ts
+
+# Local worktrees and generated previews can contain private company data.
+.worktrees/
+output/
