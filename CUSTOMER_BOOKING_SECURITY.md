@@ -217,10 +217,13 @@ version upgrades. Never prefix a WhatsApp secret with `VITE_`.
   right, with GSTIN and issue date below a fine divider. Long names and contact
   values wrap without truncation. Missing fields are omitted, and an unreadable
   logo is omitted without blocking the invoice. Receipt layouts are unchanged.
-- The invoice also includes a separate hotel Authorised Signatory block, with the
-  current company name, 18 mm of writing space and a signature line below the bank
-  details. The guest signature remains separate. The signatory block stays together
-  across page breaks. It is blank: no signature image, signing key, staff identity
+- Invoice PDFs are single-page A4 documents. Totals sit beside the amount in words
+  and bank details; the guest and hotel Authorised Signatory sections share the
+  closing row. The hotel block includes the current company name, 18 mm of writing
+  space and a signature line. The renderer makes one compact retry for normal
+  content; it then stops the download with a clear message if the invoice still
+  cannot fit without reducing legibility. It never creates a second page or clips
+  data. The signatory field is blank: no signature image, signing key, staff identity
   or automatic approval is stored or applied, and the PDF is not digitally signed.
 - Rule 46(q) generally requires supplier/representative authentication, with an
   exception for qualifying IT Act electronic invoices. Confirm applicability with
@@ -255,8 +258,9 @@ Playwright, Edge and PDF.js. `UI_TEST_ORIGIN`, `PLAYWRIGHT_CHANNEL`,
 accept file URLs to existing local installations. Test PDFs are written only to the
 ignored `output/document-profile/` directory. The checks cover profile save/download,
 fresh profile and logo reads, field clearing, failed refresh, long text wrapping,
-square/wide/tall and invalid logos, minimal headers, both receipt formats and email
-PDF generation. The server regression additionally
+square/wide/tall and invalid logos, minimal headers, single-page invoice output,
+oversized-content blocking, both receipt formats and email PDF generation. The
+server regression additionally
 checks tenant isolation and preservation of booking and payment data.
 
 ### Deployment Checklist

@@ -33,6 +33,7 @@ const invoice = {
   adjustments: [], totalTaxable: 1000, totalCGST: 60, totalSGST: 60, totalIGST: 0, grandTotal: 1120, netTotal: 1120, addTotal: 0, deductTotal: 0, status: "active", workflowStatus: "checkedOut", version: 0,
 };
 const originalInvoice = structuredClone(invoice);
+let invoiceResponse = invoice;
 const pagination = { page: 1, totalPages: 1, totalItems: 1, pageSize: 5 };
 const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "msedge", headless: true });
 const errors = [];
@@ -45,6 +46,9 @@ let downloads = 0;
 async function inspectPdf(name, required, forbidden = [], expectLogo = false) {
   const data = await readFile(new URL(name, output));
   const doc = await getDocument({ data: new Uint8Array(data), useSystemFonts: true }).promise;
+  if (name.startsWith("invoice-")) {
+    assert.equal(doc.numPages, 1, `${name}: invoices must stay on a single A4 page`);
+  }
   const text = [];
   let images = 0;
   for (let index = 1; index <= doc.numPages; index++) {
@@ -116,9 +120,9 @@ try {
       status = failSettings ? 503 : 200;
       data = failSettings ? { message: "Company profile unavailable. Try again." } : settings;
     } else if (path === "/api/invoices") {
-      data = [{ ...invoice, items: 1 }];
+      data = [{ ...invoiceResponse, items: invoiceResponse.lineItems.length }];
     } else if (path === `/api/invoices/${invoice.invNo}`) {
-      data = invoice;
+      data = invoiceResponse;
     } else if (path.endsWith("/next-number")) {
       data = { invNo: "NEW-2609-0002" };
     } else if (path === "/api/invoices/workbench") {
@@ -224,6 +228,24 @@ try {
   await download(pdfButton, "invoice-minimal-header.pdf");
   await inspectPdf("invoice-minimal-header.pdf", [...invariant, updated.business_name], [...oldFields, updated.address_line1, updated.email, updated.gstin]);
 
+  invoiceResponse = {
+    ...invoice,
+    lineItems: Array.from({ length: 28 }, (_, index) => ({
+      ...invoice.lineItems[0],
+      date: `2026-09-${String((index % 20) + 1).padStart(2, "0")}`,
+      description: `Extended accommodation and additional guest services for booking entry ${index + 1}.`,
+    })),
+  };
+  const oversizedDownloads = downloads;
+  await pdfButton.click();
+  await page.getByText(
+    "This invoice contains too much content for one readable A4 page. Shorten lengthy descriptions or reduce the number of charges before downloading. No PDF was created.",
+    { exact: true },
+  ).waitFor();
+  assert.equal(downloads, oversizedDownloads, "Oversized invoices must not create a multi-page PDF");
+  assert.equal(await pdfButton.isEnabled(), true);
+  invoiceResponse = invoice;
+
   settings = { ...settings, preset: updated, logoDataUrl: logo };
   await page.getByRole("button", { name: "Customers", exact: true }).click();
   await page.locator(".customer-directory-row").filter({ hasText: customer.name }).click();
@@ -247,7 +269,7 @@ try {
   await inspectPdf("email-slip.pdf", [updated.business_name, updated.address_line1, updated.email, customer.name, booking.termsSnapshot], oldFields, true);
   assert.deepEqual(invoice, originalInvoice, "Rendering must not mutate the stored invoice snapshot or transaction data");
   assert.deepEqual(errors, []);
-  console.log("Profile save -> invoice PDF, live refresh, cleared fields, failed refresh, wrapping, both receipt downloads and email PDF renderers passed. No live data used.");
+  console.log("Profile save -> invoice PDF, live refresh, single-page rendering, oversized-content blocking, both receipt downloads and email PDF renderers passed. No live data used.");
 } finally {
   await browser.close();
 }
