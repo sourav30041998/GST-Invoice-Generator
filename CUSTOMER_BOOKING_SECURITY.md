@@ -202,6 +202,65 @@ version upgrades. Never prefix a WhatsApp secret with `VITE_`.
 
 ## Operations
 
+### Company Profile Changes and PDFs
+
+- Save changes in Company Profile before generating a new PDF. Invoice History
+  fetches the authorized invoice and the latest company settings for every download,
+  including changes saved in another browser tab. The current name, tagline, logo,
+  GSTIN, address, contacts, bank details and invoice terms are used. Cleared optional
+  fields stay cleared; they do not fall back to the invoice's older profile.
+- If the settings request fails, the invoice PDF is not generated using stale data.
+  The download control is disabled during generation to prevent duplicate clicks.
+- The Editorial Letterhead (design 03) uses a serif company name, a burgundy vertical
+  accent and a small optional logo on the right, preserving its aspect ratio.
+  Contacts are unframed beneath the company name; the invoice reference is on the
+  right, with GSTIN and issue date below a fine divider. Long names and contact
+  values wrap without truncation. Missing fields are omitted, and an unreadable
+  logo is omitted without blocking the invoice. Receipt layouts are unchanged.
+- The invoice also includes a separate hotel Authorised Signatory block, with the
+  current company name, 18 mm of writing space and a signature line below the bank
+  details. The guest signature remains separate. The signatory block stays together
+  across page breaks. It is blank: no signature image, signing key, staff identity
+  or automatic approval is stored or applied, and the PDF is not digitally signed.
+- Rule 46(q) generally requires supplier/representative authentication, with an
+  exception for qualifying IT Act electronic invoices. Confirm applicability with
+  the hotel's GST adviser; a blank signature field is not authentication or proof
+  of compliance. See the [official CGST Rules, Rule 46](https://gstcouncil.gov.in/sites/default/files/2024-04/01062021-cgst-rules-2017-part-a-rules.pdf).
+- Stored invoice snapshots are retained for audit, not rewritten. Invoice numbers,
+  dates, customer details, charges and totals remain those of the saved invoice.
+  Changing the company invoice prefix does not renumber existing invoices. A newly
+  generated PDF is therefore not necessarily an exact copy of an earlier download.
+- Both advance-receipt download formats already obtain the current tenant's profile
+  from the receipt endpoint. Email messages and their two PDF attachments obtain it
+  on each new send. Their existing layouts are unchanged. Booking terms remain the
+  agreement saved with that booking, not the company's current invoice terms.
+- Existing downloaded PDFs and previously delivered email attachments cannot change;
+  download again, or explicitly resend, to obtain the current company details.
+- No new public endpoint or database migration is needed. Tenant-scoped queries,
+  encrypted profile storage and authenticated API access remain in place. Regression
+  tests use synthetic records and mocked SMTP, never live customer data or email.
+
+Verification:
+
+```sh
+npm run typecheck
+npm test --workspace server
+npm run build
+node scripts/check-document-profile-ui.mjs
+```
+
+The browser check requires a local frontend (default `http://localhost:5173`),
+Playwright, Edge and PDF.js. `UI_TEST_ORIGIN`, `PLAYWRIGHT_CHANNEL`,
+`PLAYWRIGHT_MODULE` and `PDFJS_MODULE` can override these defaults. Module overrides
+accept file URLs to existing local installations. Test PDFs are written only to the
+ignored `output/document-profile/` directory. The checks cover profile save/download,
+fresh profile and logo reads, field clearing, failed refresh, long text wrapping,
+square/wide/tall and invalid logos, minimal headers, both receipt formats and email
+PDF generation. The server regression additionally
+checks tenant isolation and preservation of booking and payment data.
+
+### Deployment Checklist
+
 1. Run `npm run build` before deployment.
 2. Run `npm run db:create-indexes` against the production company database before
    enabling customer traffic. Index creation is mandatory for phone uniqueness,

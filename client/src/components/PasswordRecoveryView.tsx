@@ -88,7 +88,7 @@ export function PasswordRecoveryView({
 
   const requestCode = async (isResend = false) => {
     clearFeedback();
-    setBusyMessage(isResend ? "Sending a fresh code..." : "Checking securely...");
+    setBusyMessage(isResend ? "Sending a fresh code..." : "Checking your email...");
     try {
       const result = await api.requestPasswordRecovery(email.trim());
       setChallengeToken(result.challengeToken);
@@ -201,7 +201,7 @@ export function PasswordRecoveryView({
           <div className="auth-brand-mark">
             <Building2 size={22} />
           </div>
-          <p className="auth-kicker">Secure account recovery</p>
+          <p className="auth-kicker">Account recovery</p>
           <h1>Return to your workspace with confidence.</h1>
           <div className="auth-trust-row">
             <ShieldCheck size={17} />
@@ -245,7 +245,6 @@ export function PasswordRecoveryView({
               <h2>Find your account</h2>
               <p>
                 Enter the owner email approved for your organization workspace.
-                This public screen never reveals whether an account exists.
               </p>
               <label className="field">
                 <span>Registered email address</span>
@@ -345,7 +344,6 @@ export function PasswordRecoveryView({
                 <ShieldCheck size={22} />
               </div>
               <h2>Create a new password</h2>
-              <p>The verified recovery session can only update this password once.</p>
               <label className="field">
                 <span>New password</span>
                 <div className="password-input-wrap">
@@ -421,7 +419,7 @@ export function PasswordRecoveryView({
               <p className="auth-kicker auth-success-kicker">Recovery complete</p>
               <h2>Password reset successfully</h2>
               <p>
-                Your old sessions are closed. Sign in again with the new password.
+                Your password has been reset. Sign in with your new password.
               </p>
               {!notificationSent ? (
                 <div className="auth-notice warning">

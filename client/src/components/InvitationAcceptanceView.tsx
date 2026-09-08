@@ -64,7 +64,7 @@ export function InvitationAcceptanceView({
           <div className="auth-icon">
             <LockKeyhole size={22} />
           </div>
-          <h2>Secure your account</h2>
+          <h2>Set your password</h2>
           <p>Create a password to activate your approved company workspace.</p>
 
           <label className="field">

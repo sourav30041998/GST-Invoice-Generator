@@ -18,7 +18,6 @@ export type ViewName =
 type SidebarProps = {
   activeView: ViewName;
   onViewChange: (view: ViewName) => void;
-  dbReady: boolean;
   organizationName: string;
 };
 
@@ -64,7 +63,6 @@ const navItems = [
 export function Sidebar({
   activeView,
   onViewChange,
-  dbReady,
   organizationName,
 }: SidebarProps) {
   let section = "";
@@ -73,14 +71,7 @@ export function Sidebar({
     <aside className="sidebar">
       <div className="sidebar-logo">
         <div className="sidebar-name">{organizationName || "GST Invoice"}</div>
-        <div className="sidebar-sub">Private Workspace</div>
-        <div className="db-badge">
-          {dbReady ? "MongoDB Online" : "Connecting"}
-        </div>
-      </div>
-
-      <div className="db-status">
-        {dbReady ? "Database ready" : "Checking database"}
+        <div className="sidebar-sub">Company Workspace</div>
       </div>
 
       <nav className="nav-list">
@@ -106,14 +97,6 @@ export function Sidebar({
           );
         })}
       </nav>
-
-      <div className="sidebar-foot">
-        GST Compliant - India
-        <br />
-        Data stored in MongoDB
-        <br />
-        v6.0
-      </div>
     </aside>
   );
 }

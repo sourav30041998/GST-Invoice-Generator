@@ -45,7 +45,7 @@ export function LoginView({
             <Building2 size={22} />
           </div>
           <p className="auth-kicker">GST Invoice Workspace</p>
-          <h1>One secure home for your company invoices.</h1>
+          <h1>Your company workspace.</h1>
           <div className="auth-trust-row">
             <ShieldCheck size={17} />
             <span>Approved company access only</span>
@@ -100,7 +100,7 @@ export function LoginView({
             type="submit"
             disabled={submitting}
           >
-            <span>{submitting ? "Please wait..." : "Sign in securely"}</span>
+            <span>{submitting ? "Please wait..." : "Sign in"}</span>
             <ArrowRight size={16} />
           </button>
         </form>

@@ -991,7 +991,7 @@ export function CustomerWorkspaceView({
       setSelectedCustomer(saved);
       showToast(
         customerModal.mode === "create"
-          ? "Customer created securely."
+          ? "Customer created."
           : "Customer details updated.",
       );
     } catch (error) {
@@ -1430,7 +1430,7 @@ export function CustomerWorkspaceView({
           </h2>
           <p>
             {selectedCustomer
-              ? "Manage this guest's protected details, bookings, advances, and receipts."
+              ? "Manage this guest's details, bookings, advances, and receipts."
               : "Find a guest, then open their complete customer and booking record."}
           </p>
         </div>
@@ -1521,13 +1521,12 @@ export function CustomerWorkspaceView({
                   </span>
                   <span className="customer-directory-identity">
                     <strong>{customer.name}</strong>
-                    <small>Protected customer record</small>
                   </span>
                   <span className="customer-directory-contact">
                     <small>Phone</small>
                     <strong>
                       {customerDetailLoadingId === customer._id
-                        ? "Loading secure details..."
+                        ? "Loading customer details..."
                         : customer.phoneMasked}
                     </strong>
                   </span>
@@ -1546,7 +1545,7 @@ export function CustomerWorkspaceView({
                   <span className="customer-directory-mobile-contact">
                     <small>
                       {customerDetailLoadingId === customer._id
-                        ? "Loading secure details..."
+                        ? "Loading customer details..."
                         : customer.phoneMasked}
                     </small>
                   </span>
@@ -1618,7 +1617,6 @@ export function CustomerWorkspaceView({
                   <div>
                     <p>Customer profile</p>
                     <h3>{selectedCustomer.name}</h3>
-                    <small>Protected tenant record</small>
                   </div>
                 </div>
                 <div className="customer-profile-actions">
@@ -1684,10 +1682,6 @@ export function CustomerWorkspaceView({
                   <span>Stay activity</span>
                   <h3>Bookings & advances</h3>
                 </div>
-                <span className="privacy-note">
-                  <ShieldCheck size={14} />
-                  Encrypted customer details
-                </span>
               </div>
               <div className="customer-booking-list">
                 {loadingBookings ? (
@@ -2011,7 +2005,7 @@ export function CustomerWorkspaceView({
           title={
             customerModal.mode === "create" ? "Add a customer" : "Edit customer"
           }
-          kicker="Protected contact"
+          kicker="Customer contact"
           icon={<UserRound size={19} />}
           busy={busy}
           onClose={closeCustomerModal}
@@ -2854,7 +2848,7 @@ export function CustomerWorkspaceView({
             <i />
             <i />
           </div>
-          <strong>Processing securely...</strong>
+          <strong>Processing...</strong>
         </div>
       ) : null}
     </div>

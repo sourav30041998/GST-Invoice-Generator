@@ -3,23 +3,22 @@ import {
   Download,
   Edit3,
   FileSpreadsheet,
+  LoaderCircle,
   RotateCcw,
   Search,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type {
   Invoice,
   InvoiceFilters,
   InvoiceListItem,
-  Settings,
 } from "../types";
 import { formatCurrency } from "../utils/calculations";
 import { formatDate } from "../utils/dates";
-import { buildInvoicePdf, resolveLogoDataUrl } from "../utils/pdf";
+import { buildInvoicePdf } from "../utils/pdf";
 
 type HistoryViewProps = {
-  settings: Settings;
   refreshKey: number;
   onEdit: (invoice: Invoice) => void;
   showToast: (message: string) => void;
@@ -34,7 +33,6 @@ const defaultFilters: InvoiceFilters = {
 };
 
 export function HistoryView({
-  settings,
   refreshKey,
   onEdit,
   showToast,
@@ -42,6 +40,8 @@ export function HistoryView({
   const [filters, setFilters] = useState<InvoiceFilters>(defaultFilters);
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingInvoice, setDownloadingInvoice] = useState("");
+  const downloadInProgress = useRef(false);
 
   const loadInvoices = async (activeFilters = filters) => {
     setLoading(true);
@@ -81,13 +81,20 @@ export function HistoryView({
   };
 
   const redownload = async (invNo: string) => {
+    if (downloadInProgress.current) return;
+    downloadInProgress.current = true;
+    setDownloadingInvoice(invNo);
     try {
       const invoice = await api.getInvoice(invNo);
-      const logoDataUrl = await resolveLogoDataUrl(settings.logoDataUrl);
-      buildInvoicePdf(invoice, logoDataUrl, settings.taxPresets);
+      // Refresh at download time, including changes saved in another browser tab.
+      const currentSettings = await api.getSettings();
+      buildInvoicePdf(invoice, currentSettings);
       showToast(`Re-downloading ${invNo}`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Download failed.");
+    } finally {
+      downloadInProgress.current = false;
+      setDownloadingInvoice("");
     }
   };
 
@@ -259,8 +266,14 @@ export function HistoryView({
                     className="btn btn-outline btn-small"
                     type="button"
                     onClick={() => redownload(invoice.invNo)}
+                    disabled={Boolean(downloadingInvoice)}
+                    aria-busy={downloadingInvoice === invoice.invNo}
                   >
-                    <Download size={15} />
+                    {downloadingInvoice === invoice.invNo ? (
+                      <LoaderCircle size={15} className="animate-spin" />
+                    ) : (
+                      <Download size={15} />
+                    )}
                     PDF
                   </button>
                   <button
