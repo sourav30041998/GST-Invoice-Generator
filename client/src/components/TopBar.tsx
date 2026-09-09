@@ -37,7 +37,7 @@ const viewMeta: Record<ViewName, { title: string; sub: string }> = {
   },
   about: {
     title: "About & Help",
-    sub: "System notes and invoice guidance",
+    sub: "Invoice information",
   },
 };
 
@@ -87,7 +87,6 @@ export function TopBar({
       <div className="topbar-actions">
         {authStatus?.authRequired && authStatus.authenticated ? (
           <>
-            <span className="security-badge">Secure Session</span>
             <span className="organization-badge">
               {authStatus.organization?.name || presetName}
             </span>

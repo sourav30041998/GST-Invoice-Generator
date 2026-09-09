@@ -58,7 +58,6 @@ export default function App() {
   ).get("invite");
   const [activeView, setActiveView] = useState<ViewName>(isEmailConnectionReturn ? "settings" : "create");
   const [settings, setSettings] = useState<Settings>(defaultSettings);
-  const [dbReady, setDbReady] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [authRetryKey, setAuthRetryKey] = useState(0);
@@ -97,7 +96,6 @@ export default function App() {
     async (date = invoiceDate) => {
       const loadedSettings = await api.getSettings();
       setSettings(loadedSettings);
-      setDbReady(true);
       await refreshNextNumber(date, loadedSettings.preset.invoice_prefix);
     },
     [invoiceDate, refreshNextNumber],
@@ -118,12 +116,11 @@ export default function App() {
           await loadProtectedWorkspace();
           return;
         }
-
-        setDbReady(false);
       } catch (error) {
-        setDbReady(false);
         showToast(
-          error instanceof Error ? error.message : "Could not connect to API.",
+          error instanceof Error
+            ? error.message
+            : "Could not open your workspace. Please try again.",
         );
       } finally {
         setBootstrapped(true);
@@ -144,10 +141,9 @@ export default function App() {
         setActiveView("settings");
         showToast("Workspace activated. Complete your business profile.");
       } else {
-        showToast("Signed in securely.");
+        showToast("Signed in.");
       }
     } catch (error) {
-      setDbReady(false);
       showToast(
         error instanceof Error ? error.message : "Could not load workspace.",
       );
@@ -173,7 +169,6 @@ export default function App() {
         : null,
     );
     setSettings(defaultSettings);
-    setDbReady(false);
     setEditingInvoice(null);
     setActiveDraft(null);
     setFormHeader(null);
@@ -346,7 +341,7 @@ export default function App() {
       <>
         <div className="auth-shell">
           <div className="auth-panel auth-loading">
-            Loading secure workspace...
+            Loading your workspace...
           </div>
         </div>
         <Toast message={toast} />
@@ -376,7 +371,7 @@ export default function App() {
               </div>
               <h2>Workspace unavailable</h2>
               <p>
-                We could not verify a secure connection to the invoice service.
+                We could not open your workspace. Please try again.
                 No company data has been loaded.
               </p>
               <button
@@ -425,7 +420,6 @@ export default function App() {
       <Sidebar
         activeView={activeView}
         onViewChange={handleViewChange}
-        dbReady={dbReady}
         organizationName={
           authStatus?.organization?.name || settings.preset.business_name
         }
@@ -473,7 +467,6 @@ export default function App() {
           ) : null}
           {activeView === "history" ? (
             <HistoryView
-              settings={settings}
               refreshKey={refreshKey}
               onEdit={handleEdit}
               showToast={showToast}
