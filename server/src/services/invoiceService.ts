@@ -2,10 +2,16 @@ import mongoose, { Types, type ClientSession } from "mongoose";
 import { ApiError } from "../middleware/errorHandler.js";
 import { AuditLogModel } from "../models/AuditLog.js";
 import { CounterModel } from "../models/Counter.js";
+import { BookingModel } from "../models/Booking.js";
+import { BookingNotificationModel } from "../models/BookingNotification.js";
+import { BookingPaymentModel } from "../models/BookingPayment.js";
+import { CustomerModel } from "../models/Customer.js";
 import { InvoiceModel } from "../models/Invoice.js";
 import { InvoiceDraftModel } from "../models/InvoiceDraft.js";
 import { RoomAllocationModel } from "../models/RoomAllocation.js";
+import { RoomNightLockModel } from "../models/RoomNightLock.js";
 import { calculateInvoiceTotals } from "../utils/calculateInvoice.js";
+import { customerPhoneLookupHash } from "../utils/customerRules.js";
 import { toCsv } from "../utils/csv.js";
 import { todayLocalIso, toInvoiceMonth } from "../utils/date.js";
 import {
@@ -20,6 +26,11 @@ import type {
 } from "../validation/invoiceSchemas.js";
 import { getBusinessProfileSnapshot } from "./settingsService.js";
 import {
+  linkBookingToInvoice,
+  prepareBookingForInvoice,
+  syncLinkedBookingStatus,
+} from "./bookingService.js";
+import {
   protectInvoiceRecord,
   revealInvoiceRecord,
 } from "./protectedRecordService.js";
@@ -28,6 +39,7 @@ import {
   syncRoomAllocations,
   type RoomSnapshot,
 } from "./roomService.js";
+import { syncCustomerProfileFromInvoice } from "./customerService.js";
 
 export type TenantContext = {
   organizationId: string;
@@ -120,6 +132,7 @@ function toResponseDocument(
   document: AuditDocument | null | undefined,
   scope: "invoice" | "invoice-draft",
   organizationId: string,
+  customerProfileVersion?: number,
 ) {
   const plain = toPlainDocument(document) as Record<string, unknown> | null;
   if (!plain) {
@@ -141,6 +154,7 @@ function toResponseDocument(
   return {
     ...clientRecord,
     version: typeof plain.__v === "number" ? plain.__v : 0,
+    ...(customerProfileVersion === undefined ? {} : { customerProfileVersion }),
   };
 }
 
@@ -239,7 +253,11 @@ function buildInvoiceDocument(
   rooms: RoomSnapshot[],
 ) {
   const totals = calculateInvoiceTotals(payload.lineItems, payload.adjustments);
-  const { rooms: _selectedRooms, ...invoicePayload } = payload;
+  const {
+    rooms: _selectedRooms,
+    customerProfileSync: _customerProfileSync,
+    ...invoicePayload
+  } = payload;
   return {
     ...invoicePayload,
     rooms,
@@ -252,6 +270,81 @@ function buildInvoiceDocument(
     createdBy: `user:${tenant.userId}`,
     createdByUserId: tenant.userId,
   };
+}
+
+async function validateCustomerAndBooking(
+  tenant: TenantContext,
+  payload: Pick<InvoicePayload, "customerId" | "bookingId" | "partyPhone">,
+  session: ClientSession,
+  linkedInvoiceId?: string,
+) {
+  if (!payload.customerId) {
+    if (payload.bookingId) {
+      throw new ApiError(422, "Select a customer before linking a booking");
+    }
+    return;
+  }
+
+  const customer = await CustomerModel.exists({
+    _id: payload.customerId,
+    organizationId: tenant.organizationId,
+    status: "active",
+    phoneLookupHash: customerPhoneLookupHash(
+      tenant.organizationId,
+      payload.partyPhone,
+    ),
+  }).session(session);
+  if (!customer) {
+    throw new ApiError(422, "Selected customer is unavailable");
+  }
+
+  if (payload.bookingId) {
+    const booking = await BookingModel.findOne({
+      _id: payload.bookingId,
+      organizationId: tenant.organizationId,
+      customerId: payload.customerId,
+    })
+      .select("status invoiceId")
+      .session(session)
+      .lean();
+    if (!booking) {
+      throw new ApiError(422, "Select a booking belonging to this customer");
+    }
+    if (linkedInvoiceId) {
+      if (
+        String(booking.invoiceId || "") !== linkedInvoiceId ||
+        !["confirmed", "completed"].includes(booking.status)
+      ) {
+        throw new ApiError(422, "The linked booking is unavailable");
+      }
+    } else if (booking.status !== "confirmed" || booking.invoiceId) {
+      throw new ApiError(
+        422,
+        "Select an unlinked confirmed booking belonging to this customer",
+      );
+    }
+  }
+}
+
+async function syncInvoiceCustomerProfile(
+  tenant: TenantContext,
+  payload: InvoicePayload,
+  sourceInvoiceId: string,
+  session: ClientSession,
+) {
+  if (!payload.customerProfileSync || !payload.customerId) return undefined;
+  return syncCustomerProfileFromInvoice(
+    tenant,
+    payload.customerId,
+    {
+      expectedVersion: payload.customerProfileSync.version,
+      email: payload.partyEmail,
+      address: payload.partyAddress,
+      state: payload.partyState,
+      sourceInvoiceId,
+    },
+    session,
+  );
 }
 
 async function runInvoiceTransaction<T>(
@@ -279,10 +372,14 @@ export async function createInvoice(
   if (payload.workflowStatus === "draft") {
     throw new ApiError(422, "Use the draft endpoint to save draft invoices");
   }
+  if (!payload.customerId) {
+    throw new ApiError(422, "Select a customer before issuing a new invoice");
+  }
 
   const snapshots = await getBusinessProfileSnapshot(tenant.organizationId);
   const invDate = payload.invDate || todayLocalIso();
   const invoice = await runInvoiceTransaction(async (session) => {
+    await validateCustomerAndBooking(tenant, payload, session);
     const rooms = await resolveRoomSnapshots(
       tenant,
       payload.rooms.map((room) => room.roomId),
@@ -300,6 +397,19 @@ export async function createInvoice(
       snapshots,
       rooms,
     );
+    if (payload.bookingId && payload.customerId) {
+      await prepareBookingForInvoice(
+        tenant,
+        {
+          bookingId: payload.bookingId,
+          customerId: payload.customerId,
+          checkinDate: payload.checkinDate,
+          checkoutDate: payload.checkoutDate,
+          rooms,
+        },
+        session,
+      );
+    }
     const createdInvoice = new InvoiceModel({
       ...protectInvoiceRecord("invoice", document, tenant.organizationId),
       ...numbering,
@@ -320,6 +430,17 @@ export async function createInvoice(
       },
       session,
     );
+    if (payload.bookingId) {
+      await linkBookingToInvoice(
+        tenant,
+        payload.bookingId,
+        String(createdInvoice._id),
+        createdInvoice.invNo,
+        createdInvoice.workflowStatus as
+          "reserved" | "checkedIn" | "checkedOut",
+        session,
+      );
+    }
     await writeAuditLog(
       tenant,
       "invoice",
@@ -329,7 +450,18 @@ export async function createInvoice(
       toPlainDocument(createdInvoice),
       session,
     );
-    return toResponseDocument(createdInvoice, "invoice", tenant.organizationId);
+    const customerProfileVersion = await syncInvoiceCustomerProfile(
+      tenant,
+      payload,
+      String(createdInvoice._id),
+      session,
+    );
+    return toResponseDocument(
+      createdInvoice,
+      "invoice",
+      tenant.organizationId,
+      customerProfileVersion,
+    );
   });
   return invoice;
 }
@@ -341,10 +473,14 @@ export async function createInvoiceDraft(
   if (payload.workflowStatus !== "draft") {
     throw new ApiError(422, "Draft invoices must use the draft status");
   }
+  if (!payload.customerId) {
+    throw new ApiError(422, "Select a customer before saving a new draft");
+  }
 
   const snapshots = await getBusinessProfileSnapshot(tenant.organizationId);
   const invDate = payload.invDate || todayLocalIso();
   return runInvoiceTransaction(async (session) => {
+    await validateCustomerAndBooking(tenant, payload, session);
     const rooms = await resolveRoomSnapshots(
       tenant,
       payload.rooms.map((room) => room.roomId),
@@ -369,7 +505,18 @@ export async function createInvoiceDraft(
       toPlainDocument(draft),
       session,
     );
-    return toResponseDocument(draft, "invoice-draft", tenant.organizationId);
+    const customerProfileVersion = await syncInvoiceCustomerProfile(
+      tenant,
+      payload,
+      String(draft._id),
+      session,
+    );
+    return toResponseDocument(
+      draft,
+      "invoice-draft",
+      tenant.organizationId,
+      customerProfileVersion,
+    );
   });
 }
 
@@ -394,6 +541,7 @@ export async function updateInvoiceDraft(
         throw new ApiError(404, "Draft not found");
       }
       assertExpectedVersion(documentVersion(draft), version, "Draft");
+      await validateCustomerAndBooking(tenant, invoicePayload, session);
 
       const before = toPlainDocument(draft);
       const revealedDraft = revealInvoiceRecord(
@@ -438,10 +586,17 @@ export async function updateInvoiceDraft(
           toPlainDocument(draft),
           session,
         );
+        const customerProfileVersion = await syncInvoiceCustomerProfile(
+          tenant,
+          invoicePayload,
+          String(draft._id),
+          session,
+        );
         return toResponseDocument(
           draft,
           "invoice-draft",
           tenant.organizationId,
+          customerProfileVersion,
         );
       }
 
@@ -457,6 +612,19 @@ export async function updateInvoiceDraft(
         snapshots,
         rooms,
       );
+      if (invoicePayload.bookingId && invoicePayload.customerId) {
+        await prepareBookingForInvoice(
+          tenant,
+          {
+            bookingId: invoicePayload.bookingId,
+            customerId: invoicePayload.customerId,
+            checkinDate: invoicePayload.checkinDate,
+            checkoutDate: invoicePayload.checkoutDate,
+            rooms,
+          },
+          session,
+        );
+      }
       const [invoice] = await InvoiceModel.create(
         [
           {
@@ -482,6 +650,16 @@ export async function updateInvoiceDraft(
         },
         session,
       );
+      if (invoicePayload.bookingId) {
+        await linkBookingToInvoice(
+          tenant,
+          invoicePayload.bookingId,
+          String(invoice._id),
+          invoice.invNo,
+          invoice.workflowStatus as "reserved" | "checkedIn" | "checkedOut",
+          session,
+        );
+      }
       const deleted = await InvoiceDraftModel.deleteOne({
         _id: draft._id,
         organizationId: tenant.organizationId,
@@ -502,7 +680,18 @@ export async function updateInvoiceDraft(
         toPlainDocument(invoice),
         session,
       );
-      return toResponseDocument(invoice, "invoice", tenant.organizationId);
+      const customerProfileVersion = await syncInvoiceCustomerProfile(
+        tenant,
+        invoicePayload,
+        String(invoice._id),
+        session,
+      );
+      return toResponseDocument(
+        invoice,
+        "invoice",
+        tenant.organizationId,
+        customerProfileVersion,
+      );
     });
 
     if (!result) {
@@ -638,6 +827,28 @@ export async function updateInvoice(
       defaultWorkflowStatus(invoice),
       nextWorkflowStatus,
     );
+    await validateCustomerAndBooking(
+      tenant,
+      invoicePayload,
+      session,
+      String(invoice._id),
+    );
+    const storedCustomerId = invoice.customerId
+      ? String(invoice.customerId)
+      : "";
+    const storedBookingId = invoice.bookingId ? String(invoice.bookingId) : "";
+    if (storedCustomerId && invoicePayload.customerId !== storedCustomerId) {
+      throw new ApiError(
+        409,
+        "The customer linked to an issued invoice cannot be changed",
+      );
+    }
+    if (storedBookingId && invoicePayload.bookingId !== storedBookingId) {
+      throw new ApiError(
+        409,
+        "The booking linked to an issued invoice cannot be changed",
+      );
+    }
 
     const before = toPlainDocument(invoice);
     const revealedInvoice = revealInvoiceRecord(
@@ -681,6 +892,12 @@ export async function updateInvoice(
       },
       session,
     );
+    await syncLinkedBookingStatus(
+      tenant,
+      invoice.bookingId ? String(invoice.bookingId) : undefined,
+      nextWorkflowStatus,
+      session,
+    );
     await writeAuditLog(
       tenant,
       "invoice",
@@ -690,7 +907,18 @@ export async function updateInvoice(
       toPlainDocument(invoice),
       session,
     );
-    return toResponseDocument(invoice, "invoice", tenant.organizationId);
+    const customerProfileVersion = await syncInvoiceCustomerProfile(
+      tenant,
+      invoicePayload,
+      String(invoice._id),
+      session,
+    );
+    return toResponseDocument(
+      invoice,
+      "invoice",
+      tenant.organizationId,
+      customerProfileVersion,
+    );
   });
 }
 
@@ -907,6 +1135,12 @@ export async function cancelInvoice(
         },
         session,
       );
+      await syncLinkedBookingStatus(
+        tenant,
+        invoice.bookingId ? String(invoice.bookingId) : undefined,
+        "cancelled",
+        session,
+      );
       await writeAuditLog(
         tenant,
         "invoice",
@@ -985,6 +1219,13 @@ export async function clearCompanyData(tenant: TenantContext) {
     InvoiceModel.deleteMany({ organizationId: tenant.organizationId }),
     InvoiceDraftModel.deleteMany({ organizationId: tenant.organizationId }),
     RoomAllocationModel.deleteMany({ organizationId: tenant.organizationId }),
+    RoomNightLockModel.deleteMany({ organizationId: tenant.organizationId }),
+    BookingNotificationModel.deleteMany({
+      organizationId: tenant.organizationId,
+    }),
+    BookingPaymentModel.deleteMany({ organizationId: tenant.organizationId }),
+    BookingModel.deleteMany({ organizationId: tenant.organizationId }),
+    CustomerModel.deleteMany({ organizationId: tenant.organizationId }),
     CounterModel.deleteMany({ organizationId: tenant.organizationId }),
     AuditLogModel.deleteMany({ organizationId: tenant.organizationId }),
   ]);

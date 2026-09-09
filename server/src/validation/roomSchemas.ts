@@ -59,6 +59,7 @@ export const roomAvailabilityQuerySchema = z
     checkinDate: isoDateSchema,
     checkoutDate: isoDateSchema,
     excludeInvoiceId: roomIdSchema.optional(),
+    excludeBookingId: roomIdSchema.optional(),
   })
   .strict()
   .superRefine((value, context) => {

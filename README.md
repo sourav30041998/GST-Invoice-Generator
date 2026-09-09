@@ -55,6 +55,13 @@ See [PASSWORD_RECOVERY.md](./PASSWORD_RECOVERY.md) for the recovery API contract
 
 Each organization owns its own room directory. Rooms are selected from server-verified availability rather than entered as free text, and a single invoice can carry multiple rooms. See [ROOM_INVENTORY.md](./ROOM_INVENTORY.md) for the database model, API contract, security controls, migration guidance, and operations checklist.
 
+## Customers, Bookings, and Advances
+
+Customer phone identity, encrypted contact storage, requested room combinations,
+simple advance-backed bookings, modern receipt and booking-slip PDFs, guarded
+notification resends, deferred room assignment, and invoice linking are documented in
+[CUSTOMER_BOOKING_SECURITY.md](./CUSTOMER_BOOKING_SECURITY.md).
+
 ## Closed Access
 
 Company registration is closed. A separate MFA-protected platform administrator creates one-time invitations for approved company owners; only accepting an unexpired invitation activates a company. See [ACCESS_CONTROL.md](./ACCESS_CONTROL.md) and [SERVICE_SEPARATION.md](./SERVICE_SEPARATION.md) for the cross-service contract and operational rules.
@@ -94,7 +101,9 @@ CLIENT_ORIGIN=https://<your-render-service>.onrender.com
 COMPANY_APP_ORIGIN=https://<your-render-service>.onrender.com
 AUTH_REQUIRED=true
 SESSION_SECRET=<random secret with 32 or more characters>
+DATA_ENCRYPTION_KEY=<Base64URL-encoded random 32-byte key>
 SESSION_TTL_MINUTES=480
+SESSION_IDLE_TTL_MINUTES=60
 INVITATION_TOKEN_SECRET=<Company-only 32+ character invitation-token secret>
 PASSWORD_RESET_SECRET=<dedicated random secret with 32 or more characters>
 ADMIN_INTERNAL_SHARED_SECRET=<shared 32+ character internal-service secret>
@@ -104,6 +113,7 @@ SMTP_USER=<SMTP user>
 SMTP_PASSWORD=<SMTP password or app password>
 SMTP_FROM=GST Invoice Generator <no-reply@example.com>
 SMTP_SECURE=false
+# Optional WhatsApp Business Cloud API variables are listed in .env.example.
 TRUST_PROXY=true
 COOKIE_SECURE=true
 SESSION_COOKIE_SAMESITE=lax
@@ -119,6 +129,18 @@ authenticated TLS delivery on port 2525.
 Before the first deployment of the multi-company branch, follow the one-time migration procedure in [MULTI_TENANCY.md](./MULTI_TENANCY.md). Deploy the separate Platform Admin service only after the Company service is healthy; its own repository documents administrator bootstrap and MFA enrollment.
 
 Render Free services can sleep after inactivity, so users may need to wait for the first request. MongoDB Atlas Free clusters do not include managed backups; export encrypted backups with `mongodump` on a regular schedule.
+
+## Company Email Connections
+
+Company Profile now includes Gmail send-only authorization and custom-domain
+delivery through each company's own Brevo account. Domains may use any registrar.
+Customer booking/receipt emails require a connected, verified company sender;
+they no longer silently fall back to platform SMTP. Password-recovery and
+invitation emails continue using the platform configuration.
+
+Follow [ORGANIZATION_EMAIL.md](./ORGANIZATION_EMAIL.md) for Google setup, domain
+verification, API contracts, database collections, rollout and security controls.
+Configure Google only in the Company service, not the separate Admin service.
 
 ## GST Rate Notes
 

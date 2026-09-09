@@ -7,6 +7,7 @@ import {
   ImagePlus,
   Landmark,
   LoaderCircle,
+  Mail,
   Plus,
   Save,
   Trash2,
@@ -14,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "../api";
+import { OrganizationEmailSettings } from "./OrganizationEmailSettings";
 import { defaultPreset } from "../constants";
 import type { Preset, Settings, TaxPreset } from "../types";
 
@@ -445,6 +447,7 @@ export function SettingsView({
               ? `GSTIN ${form.gstin}`
               : "Complete the business profile before issuing invoices."}
           </p>
+          <a className="company-email-shortcut" href="#company-email"><Mail size={15} /> Company Email</a>
         </div>
       </section>
 
@@ -776,6 +779,8 @@ export function SettingsView({
           </button>
         </div>
       </section>
+
+      <OrganizationEmailSettings businessName={settings.preset.business_name} />
 
       <section className="settings-grid">
         <div className="panel compact-panel">

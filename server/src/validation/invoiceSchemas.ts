@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { isValidStayRange } from "../utils/roomRules.js";
 import { selectedRoomSchema } from "./roomSchemas.js";
+import { customerIdSchema, customerPhoneSchema } from "./customerSchemas.js";
+import { bookingIdSchema } from "./bookingSchemas.js";
 import {
   calculateInvoiceTotals,
   MAX_INVOICE_AMOUNT,
@@ -251,11 +253,32 @@ export const adjustmentSchema = z
 
 const invoicePayloadBaseSchema = z
   .object({
+    customerId: customerIdSchema.optional(),
+    bookingId: bookingIdSchema.optional(),
+    customerProfileSync: z
+      .object({
+        version: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+      })
+      .strict()
+      .optional(),
     invDate: isoDateSchema,
     checkinDate: isoDateSchema,
     checkoutDate: isoDateSchema,
     confirmNo: optionalText(80),
     partyName: shortText(160).min(1, "Payee name is required"),
+    partyPhone: z
+      .union([customerPhoneSchema, z.literal("")])
+      .optional()
+      .default(""),
+    partyEmail: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email("Enter a valid customer email")
+      .max(254)
+      .or(z.literal(""))
+      .optional()
+      .default(""),
     partyGSTIN: z
       .string()
       .trim()
@@ -292,6 +315,13 @@ function validateInvoiceComposition(
   invoice: InvoicePayloadBase,
   context: z.RefinementCtx,
 ) {
+  if (invoice.customerProfileSync && !invoice.customerId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["customerProfileSync"],
+      message: "Select a customer before updating their profile",
+    });
+  }
   if (!isValidStayRange(invoice.checkinDate, invoice.checkoutDate)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

@@ -2,7 +2,11 @@ import mongoose from "mongoose";
 import { connectDatabase } from "../db/mongoose.js";
 import { AuditLogModel } from "../models/AuditLog.js";
 import { BusinessProfileModel } from "../models/BusinessProfile.js";
+import { BookingModel } from "../models/Booking.js";
+import { BookingNotificationModel } from "../models/BookingNotification.js";
+import { BookingPaymentModel } from "../models/BookingPayment.js";
 import { CounterModel } from "../models/Counter.js";
+import { CustomerModel } from "../models/Customer.js";
 import { InvoiceDraftModel } from "../models/InvoiceDraft.js";
 import { InvoiceModel } from "../models/Invoice.js";
 import { InternalRequestNonceModel } from "../models/InternalRequestNonce.js";
@@ -14,15 +18,24 @@ import { PasswordRecoveryThrottleModel } from "../models/PasswordRecoveryThrottl
 import { ReferenceDataModel } from "../models/ReferenceData.js";
 import { RoomAllocationModel } from "../models/RoomAllocation.js";
 import { RoomModel } from "../models/Room.js";
+import { RoomNightLockModel } from "../models/RoomNightLock.js";
 import { SchemaMigrationModel } from "../models/SchemaMigration.js";
 import { SessionModel } from "../models/Session.js";
 import { SettingModel } from "../models/Setting.js";
 import { UserModel } from "../models/User.js";
+import { OrganizationEmailConnectionModel, EmailOAuthChallengeModel, EmailThrottleModel } from "../models/OrganizationEmailConnection.js";
 
 const models = [
+  OrganizationEmailConnectionModel,
+  EmailOAuthChallengeModel,
+  EmailThrottleModel,
   AuditLogModel,
   BusinessProfileModel,
+  BookingModel,
+  BookingNotificationModel,
+  BookingPaymentModel,
   CounterModel,
+  CustomerModel,
   InvoiceDraftModel,
   InvoiceModel,
   InternalCommandModel,
@@ -34,6 +47,7 @@ const models = [
   ReferenceDataModel,
   RoomAllocationModel,
   RoomModel,
+  RoomNightLockModel,
   SchemaMigrationModel,
   SessionModel,
   SettingModel,

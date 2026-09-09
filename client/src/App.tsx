@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { RefreshCw, ShieldAlert } from "lucide-react";
 import { api } from "./api";
 import { AboutView } from "./components/AboutView";
@@ -23,6 +30,13 @@ import type {
   Settings,
 } from "./types";
 import { todayIso } from "./utils/dates";
+import { isEmailConnectionReturn } from "./utils/emailConnectionReturn";
+
+const CustomerWorkspaceView = lazy(() =>
+  import("./components/CustomerWorkspaceView").then((module) => ({
+    default: module.CustomerWorkspaceView,
+  })),
+);
 
 const defaultSettings: Settings = {
   preset: defaultPreset,
@@ -42,7 +56,7 @@ export default function App() {
   const invitationToken = new URLSearchParams(
     window.location.hash.replace(/^#/, ""),
   ).get("invite");
-  const [activeView, setActiveView] = useState<ViewName>("create");
+  const [activeView, setActiveView] = useState<ViewName>(isEmailConnectionReturn ? "settings" : "create");
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [dbReady, setDbReady] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
@@ -464,6 +478,21 @@ export default function App() {
               onEdit={handleEdit}
               showToast={showToast}
             />
+          ) : null}
+          {activeView === "customers" ? (
+            <Suspense
+              fallback={
+                <div className="customer-page-lock customer-route-loader">
+                  <div className="orbit-loader"><i /><i /><i /></div>
+                  <strong>Opening customer desk...</strong>
+                </div>
+              }
+            >
+              <CustomerWorkspaceView
+                settings={settings}
+                showToast={showToast}
+              />
+            </Suspense>
           ) : null}
           {activeView === "rooms" ? (
             <RoomDirectoryView

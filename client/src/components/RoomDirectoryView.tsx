@@ -25,13 +25,14 @@ import type {
   RoomAllocationHistory,
   RoomBookingBoard,
   RoomInput,
+  InvoiceWorkflowStatus,
 } from "../types";
 
 type RoomDirectoryViewProps = {
   showToast: (message: string) => void;
   onOpenInvoice: (
     invoiceNumber: string,
-    workflowStatus: RoomAllocation["status"],
+    workflowStatus: InvoiceWorkflowStatus,
   ) => void;
 };
 
@@ -135,6 +136,9 @@ function allocationLabel(status: RoomAllocation["status"]) {
   if (status === "checkedIn") return "Checked in";
   if (status === "checkedOut") return "Checked out";
   if (status === "cancelled") return "Cancelled";
+  if (status === "enquiry") return "Enquiry";
+  if (status === "pendingAdvance") return "Awaiting advance";
+  if (status === "completed") return "Completed";
   return "Reserved";
 }
 
@@ -507,8 +511,14 @@ export function RoomDirectoryView({
   };
 
   const openHistoryInvoice = (allocation: RoomAllocation) => {
+    if (!allocation.invoiceNumber || allocation.source === "booking") {
+      return;
+    }
     setHistoryRoom(null);
-    onOpenInvoice(allocation.invoiceNumber, allocation.status);
+    onOpenInvoice(
+      allocation.invoiceNumber,
+      allocation.status as InvoiceWorkflowStatus,
+    );
   };
 
   return (
@@ -835,17 +845,20 @@ export function RoomDirectoryView({
                           );
                           return (
                             <button
-                              aria-label={`${room.roomNumber}, invoice ${allocation.invoiceNumber}, ${allocationLabel(allocation.status)}, ${dateLabel(allocation.checkinDate)} to ${dateLabel(allocation.checkoutDate)}`}
+                              aria-label={`${room.roomNumber}, ${allocation.source === "booking" ? "booking" : "invoice"} ${allocation.confirmationNumber || allocation.invoiceNumber}, ${allocationLabel(allocation.status)}, ${dateLabel(allocation.checkinDate)} to ${dateLabel(allocation.checkoutDate)}`}
                               className={`booking-bar ${allocation.status}${selectedBooking?._id === allocation._id ? " selected" : ""}`}
                               key={allocation._id}
                               onClick={() => setSelectedBooking(allocation)}
                               style={{
                                 gridColumn: `${position.start + 1} / span ${position.span}`,
                               }}
-                              title={`${allocation.invoiceNumber}: ${allocationLabel(allocation.status)}`}
+                              title={`${allocation.confirmationNumber || allocation.invoiceNumber}: ${allocationLabel(allocation.status)}`}
                               type="button"
                             >
-                              <span>{allocation.invoiceNumber}</span>
+                              <span>
+                                {allocation.confirmationNumber ||
+                                  allocation.invoiceNumber}
+                              </span>
                             </button>
                           );
                         })
@@ -876,7 +889,11 @@ export function RoomDirectoryView({
                 {selectedBookingRoom?.roomNumber ||
                   selectedBooking.roomNumberSnapshot}
               </strong>
-              <span>Invoice {selectedBooking.invoiceNumber}</span>
+              <span>
+                {selectedBooking.source === "booking" ? "Booking" : "Invoice"}{" "}
+                {selectedBooking.confirmationNumber ||
+                  selectedBooking.invoiceNumber}
+              </span>
               <span>
                 {dateLabel(selectedBooking.checkinDate)} to{" "}
                 {dateLabel(selectedBooking.checkoutDate)}
@@ -1196,7 +1213,7 @@ export function RoomDirectoryView({
                   <table className="data-table room-history-table">
                     <thead>
                       <tr>
-                        <th>Invoice</th>
+                        <th>Reference</th>
                         <th>Arrival</th>
                         <th>Departure</th>
                         <th>Status</th>
@@ -1207,14 +1224,21 @@ export function RoomDirectoryView({
                         allocations.map((allocation) => (
                           <tr key={allocation._id}>
                             <td>
-                              <button
-                                className="invoice-link-button room-history-invoice-link"
-                                type="button"
-                                onClick={() => openHistoryInvoice(allocation)}
-                                title={`Open invoice ${allocation.invoiceNumber}`}
-                              >
-                                {allocation.invoiceNumber}
-                              </button>
+                              {allocation.invoiceNumber &&
+                              allocation.source !== "booking" ? (
+                                <button
+                                  className="invoice-link-button room-history-invoice-link"
+                                  type="button"
+                                  onClick={() => openHistoryInvoice(allocation)}
+                                  title={`Open invoice ${allocation.invoiceNumber}`}
+                                >
+                                  {allocation.invoiceNumber}
+                                </button>
+                              ) : (
+                                <span className="room-history-booking-reference">
+                                  {allocation.confirmationNumber || "Booking"}
+                                </span>
+                              )}
                             </td>
                             <td>{dateLabel(allocation.checkinDate)}</td>
                             <td>{dateLabel(allocation.checkoutDate)}</td>

@@ -159,10 +159,18 @@ export type RoomAllocation = {
   _id: string;
   roomId?: string;
   invoiceNumber: string;
+  bookingId?: string;
+  confirmationNumber?: string;
+  source?: "invoice" | "booking";
   roomNumberSnapshot: string;
   checkinDate: string;
   checkoutDate: string;
-  status: Exclude<InvoiceWorkflowStatus, "draft">;
+  status:
+    | Exclude<InvoiceWorkflowStatus, "draft">
+    | "enquiry"
+    | "pendingAdvance"
+    | "confirmed"
+    | "completed";
   createdAt?: string;
 };
 
@@ -186,11 +194,18 @@ export type RoomBookingBoard = {
 };
 
 export type InvoicePayload = {
+  customerId?: string;
+  bookingId?: string;
+  customerProfileSync?: {
+    version: number;
+  };
   invDate: string;
   checkinDate: string;
   checkoutDate: string;
   confirmNo: string;
   partyName: string;
+  partyPhone: string;
+  partyEmail: string;
   partyGSTIN: string;
   partyAddress: string;
   partyState: string;
@@ -203,7 +218,11 @@ export type InvoicePayload = {
 
 type InvoiceRecordBase = Omit<
   InvoicePayload,
-  "lineItems" | "adjustments" | "workflowStatus" | "rooms"
+  | "lineItems"
+  | "adjustments"
+  | "workflowStatus"
+  | "rooms"
+  | "customerProfileSync"
 > & {
   roomNo: string;
   rooms: InvoiceRoom[];
@@ -220,6 +239,7 @@ type InvoiceRecordBase = Omit<
   netTotal: number;
   presetSnapshot: Preset;
   version: number;
+  customerProfileVersion?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -290,4 +310,179 @@ export type InvoiceFilters = {
   status: "" | "active" | "cancelled";
   workflowStatus?: "" | InvoiceWorkflowStatus;
   search: string;
+};
+
+export type Pagination = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+};
+
+export type Customer = {
+  _id: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  state: string;
+  notes: string;
+  whatsappOptIn: boolean;
+  whatsappOptInRecordedAt?: string;
+  status: "active" | "inactive";
+  version: number;
+  bookingCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type CustomerInput = Pick<
+  Customer,
+  "name" | "phone" | "email" | "address" | "state" | "notes"
+>;
+
+export type CustomerSummary = Pick<
+  Customer,
+  "_id" | "name" | "status" | "version" | "bookingCount"
+> & {
+  phoneMasked: string;
+};
+
+export type CustomerListResponse = {
+  items: CustomerSummary[];
+  pagination: Pagination;
+};
+
+export type BookingStatus =
+  "enquiry" | "pendingAdvance" | "confirmed" | "cancelled" | "completed";
+
+export type BookingRoom = {
+  roomId: string;
+  roomNumber: string;
+  roomType: string;
+};
+
+export type BookingRoomRequest = {
+  roomType: string;
+  bedsPerRoom: number;
+  quantity: number;
+};
+
+export type BookingDelivery = {
+  emailSentAt: string | null;
+  whatsappSentAt: string | null;
+};
+
+export type BookingPaymentMethod =
+  "cash" | "card" | "upi" | "bankTransfer" | "other";
+
+export type BookingPayment = {
+  _id: string;
+  bookingId: string;
+  customerId: string;
+  receiptNumber: string;
+  type: "advance" | "refund";
+  amount: number;
+  method: BookingPaymentMethod;
+  reference: string;
+  notes: string;
+  receivedAt: string;
+  status: "recorded" | "voided";
+  createdAt?: string;
+};
+
+export type Booking = {
+  _id: string;
+  customerId: string;
+  confirmationNumber: string;
+  checkinDate: string;
+  checkoutDate: string;
+  rooms: BookingRoom[];
+  requestedRooms: BookingRoomRequest[];
+  guestCount: number;
+  estimatedTotal: number;
+  advanceReceived: number;
+  status: BookingStatus;
+  notes: string;
+  termsSnapshot: string;
+  invoiceId: string | null;
+  invoiceNumber: string;
+  delivery: BookingDelivery;
+  version: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type BookingSummary = Omit<Booking, "notes" | "termsSnapshot">;
+
+export type BookingListResponse = {
+  items: BookingSummary[];
+  pagination: Pagination;
+  summary: {
+    total: number;
+    open: number;
+    confirmed: number;
+  };
+};
+
+export type InitialBookingPaymentInput = {
+  amount: number;
+  method: BookingPaymentMethod;
+  reference: string;
+  notes: string;
+  idempotencyKey: string;
+  receivedAt?: string;
+};
+
+export type BookingInput = {
+  idempotencyKey: string;
+  customerId: string;
+  checkinDate: string;
+  checkoutDate: string;
+  roomIds: string[];
+  requestedRooms: BookingRoomRequest[];
+  guestCount: number;
+  estimatedTotal: number;
+  status: "enquiry" | "pendingAdvance" | "confirmed";
+  notes: string;
+  terms: string;
+  initialPayment?: InitialBookingPaymentInput;
+};
+
+export type BookingCreateResponse = {
+  booking: Booking;
+  payment: BookingPayment | null;
+};
+
+export type BookingPaymentInput = InitialBookingPaymentInput & {
+  type: "advance" | "refund";
+  confirmBooking: boolean;
+};
+
+export type BookingNotificationResult = {
+  results: Array<{
+    channel: "email" | "whatsapp";
+    status: "sent" | "failed" | "skipped";
+    message: string;
+  }>;
+};
+
+export type BookingReceipt = {
+  booking: Booking;
+  payment: BookingPayment;
+  customer: Pick<Customer, "_id" | "name" | "phone" | "email">;
+  business: Preset;
+  logoDataUrl: string | null;
+};
+export type OrganizationEmailSettings = {
+  gmailAvailable: boolean;
+  provider: "gmail" | "brevo" | null;
+  status: "notConnected" | "pending" | "connected" | "reconnectRequired" | "disconnected";
+  senderName: string;
+  senderEmail: string;
+  dnsRecords: Array<{ type: string; host: string; value: string; verified: boolean }>;
+  verifiedAt: string | null;
+  lastAcceptedAt: string | null;
 };

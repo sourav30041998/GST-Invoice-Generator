@@ -45,6 +45,47 @@ const envSchema = z.object({
     )
     .optional(),
   SMTP_SECURE: booleanStringSchema,
+  GOOGLE_EMAIL_CLIENT_ID: z.string().trim().min(1).optional(),
+  GOOGLE_EMAIL_CLIENT_SECRET: z.string().min(1).optional(),
+  WHATSAPP_ACCESS_TOKEN: z
+    .string()
+    .trim()
+    .min(20)
+    .or(z.literal(""))
+    .optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z
+    .string()
+    .trim()
+    .regex(/^\d+$/)
+    .or(z.literal(""))
+    .optional(),
+  WHATSAPP_API_VERSION: z
+    .string()
+    .trim()
+    .regex(/^v\d+\.\d+$/)
+    .default("v23.0"),
+  WHATSAPP_TEMPLATE_CONFIRMATION: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .or(z.literal(""))
+    .optional(),
+  WHATSAPP_TEMPLATE_RECEIPT: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .or(z.literal(""))
+    .optional(),
+  WHATSAPP_TEMPLATE_CANCELLATION: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .or(z.literal(""))
+    .optional(),
+  WHATSAPP_TEMPLATE_LANGUAGE: z.string().trim().min(2).max(10).default("en"),
   SESSION_TTL_MINUTES: z.coerce
     .number()
     .int()
@@ -71,6 +112,9 @@ const envSchema = z.object({
 
 const parsedEnv = envSchema.parse(process.env);
 const isProduction = parsedEnv.NODE_ENV === "production";
+if (Boolean(parsedEnv.GOOGLE_EMAIL_CLIENT_ID) !== Boolean(parsedEnv.GOOGLE_EMAIL_CLIENT_SECRET)) {
+  throw new Error("GOOGLE_EMAIL_CLIENT_ID and GOOGLE_EMAIL_CLIENT_SECRET must be configured together");
+}
 
 function toBoolean(value: "true" | "false" | undefined, fallback: boolean) {
   if (value === "true") {
@@ -98,6 +142,14 @@ const smtpValues = [
   parsedEnv.SMTP_FROM,
 ];
 const smtpConfigured = smtpValues.every(Boolean);
+const whatsappValues = [
+  parsedEnv.WHATSAPP_ACCESS_TOKEN,
+  parsedEnv.WHATSAPP_PHONE_NUMBER_ID,
+  parsedEnv.WHATSAPP_TEMPLATE_CONFIRMATION,
+  parsedEnv.WHATSAPP_TEMPLATE_RECEIPT,
+  parsedEnv.WHATSAPP_TEMPLATE_CANCELLATION,
+];
+const whatsappConfigured = whatsappValues.every(Boolean);
 const passwordResetSecret =
   parsedEnv.PASSWORD_RESET_SECRET ||
   (!isProduction ? parsedEnv.INVITATION_TOKEN_SECRET : undefined);
@@ -144,6 +196,12 @@ validateExactOrigin(companyAppOrigin, "COMPANY_APP_ORIGIN");
 if (smtpValues.some(Boolean) && !smtpConfigured) {
   throw new Error(
     "SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM must be configured together",
+  );
+}
+
+if (whatsappValues.some(Boolean) && !whatsappConfigured) {
+  throw new Error(
+    "All WhatsApp access, phone-number, and template variables must be configured together",
   );
 }
 
@@ -252,6 +310,9 @@ export const env = {
   PASSWORD_RESET_SECRET: passwordResetSecret,
   DATA_ENCRYPTION_KEY_BYTES: dataEncryptionKey,
   SMTP_CONFIGURED: smtpConfigured,
+  GOOGLE_EMAIL_CONFIGURED: Boolean(parsedEnv.GOOGLE_EMAIL_CLIENT_ID && parsedEnv.GOOGLE_EMAIL_CLIENT_SECRET),
+  GOOGLE_EMAIL_REDIRECT_URI: `${companyAppOrigin}/email-connect`,
+  WHATSAPP_CONFIGURED: whatsappConfigured,
   SMTP_SECURE: toBoolean(parsedEnv.SMTP_SECURE, parsedEnv.SMTP_PORT === 465),
   COMPANY_SESSION_COOKIE: isProduction
     ? "__Host-company_session"

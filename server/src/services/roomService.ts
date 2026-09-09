@@ -2,8 +2,10 @@ import type { ClientSession } from "mongoose";
 import { Types } from "mongoose";
 import { ApiError } from "../middleware/errorHandler.js";
 import { AuditLogModel } from "../models/AuditLog.js";
+import { BookingModel } from "../models/Booking.js";
 import { RoomAllocationModel } from "../models/RoomAllocation.js";
 import { RoomModel } from "../models/Room.js";
+import { RoomNightLockModel } from "../models/RoomNightLock.js";
 import {
   isValidStayRange,
   normalizeRoomNumber,
@@ -18,6 +20,7 @@ import type {
   UpdateRoomPayload,
 } from "../validation/roomSchemas.js";
 import type { TenantContext } from "./invoiceService.js";
+import { replaceRoomNightLocks } from "./roomNightLockService.js";
 
 const MAX_ROOMS_PER_ORGANIZATION = 10_000;
 const ROOM_HISTORY_PAGE_SIZE = 10;
@@ -143,7 +146,11 @@ export async function updateRoom(
       roomId: room._id,
       status: { $in: ROOM_ALLOCATION_LOCK_STATUSES },
     });
-    if (activeAllocation) {
+    const activeNightLock = await RoomNightLockModel.exists({
+      organizationId: tenant.organizationId,
+      roomId: room._id,
+    });
+    if (activeAllocation || activeNightLock) {
       throw new ApiError(
         409,
         "This room has an active reservation or check-in and cannot be deactivated.",
@@ -203,7 +210,11 @@ export async function archiveRoom(tenant: TenantContext, roomId: string) {
     roomId: room._id,
     status: { $in: ROOM_ALLOCATION_LOCK_STATUSES },
   });
-  if (activeAllocation) {
+  const activeNightLock = await RoomNightLockModel.exists({
+    organizationId: tenant.organizationId,
+    roomId: room._id,
+  });
+  if (activeAllocation || activeNightLock) {
     throw new ApiError(
       409,
       "This room has an active reservation or check-in and cannot be deactivated.",
@@ -245,20 +256,54 @@ export async function getRoomAllocations(
     roomId,
     createdAt: { $gte: historyStart },
   };
-  const totalItems = await RoomAllocationModel.countDocuments(filter);
+  const [invoiceItems, bookingItems] = await Promise.all([
+    RoomAllocationModel.find(filter)
+      .select(
+        "invoiceId invoiceNumber roomNumberSnapshot checkinDate checkoutDate status createdAt",
+      )
+      .lean(),
+    BookingModel.find({
+      organizationId: tenant.organizationId,
+      "rooms.roomId": roomId,
+      createdAt: { $gte: historyStart },
+    })
+      .select(
+        "confirmationNumber checkinDate checkoutDate status invoiceId invoiceNumber createdAt rooms",
+      )
+      .lean(),
+  ]);
+  const combinedItems = [
+    ...invoiceItems.map((item) => ({ ...item, source: "invoice" as const })),
+    ...bookingItems
+      .filter((item) => !item.invoiceId)
+      .map((item) => ({
+        _id: item._id,
+        bookingId: item._id,
+        confirmationNumber: item.confirmationNumber,
+        invoiceNumber: "",
+        roomNumberSnapshot:
+          item.rooms.find((entry) => String(entry.roomId) === roomId)
+            ?.roomNumber || "Room",
+        checkinDate: item.checkinDate,
+        checkoutDate: item.checkoutDate,
+        status: item.status === "confirmed" ? "reserved" : item.status,
+        createdAt: item.createdAt,
+        source: "booking" as const,
+      })),
+  ].sort(
+    (left, right) =>
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+  );
+  const totalItems = combinedItems.length;
   const totalPages = Math.max(
     1,
     Math.ceil(totalItems / ROOM_HISTORY_PAGE_SIZE),
   );
   const page = Math.min(query.page, totalPages);
-  const items = await RoomAllocationModel.find(filter)
-    .sort({ createdAt: -1, _id: -1 })
-    .skip((page - 1) * ROOM_HISTORY_PAGE_SIZE)
-    .limit(ROOM_HISTORY_PAGE_SIZE)
-    .select(
-      "invoiceId invoiceNumber roomNumberSnapshot checkinDate checkoutDate status createdAt",
-    )
-    .lean();
+  const items = combinedItems.slice(
+    (page - 1) * ROOM_HISTORY_PAGE_SIZE,
+    page * ROOM_HISTORY_PAGE_SIZE,
+  );
 
   return {
     items,
@@ -277,7 +322,7 @@ export async function getRoomBookingBoard(
   tenant: TenantContext,
   query: RoomBookingBoardQuery,
 ) {
-  const [rooms, allocations] = await Promise.all([
+  const [rooms, allocations, bookings] = await Promise.all([
     RoomModel.find({ organizationId: tenant.organizationId })
       .sort({ isActive: -1, roomNumber: 1 })
       .select("roomNumber roomType floor wing capacity isActive")
@@ -293,28 +338,95 @@ export async function getRoomBookingBoard(
         "roomId invoiceNumber roomNumberSnapshot checkinDate checkoutDate status createdAt",
       )
       .lean(),
+    BookingModel.find({
+      organizationId: tenant.organizationId,
+      status: "confirmed",
+      invoiceId: { $exists: false },
+      checkinDate: { $lt: query.to },
+      checkoutDate: { $gt: query.from },
+    })
+      .sort({ checkinDate: 1, createdAt: 1 })
+      .select("confirmationNumber checkinDate checkoutDate rooms createdAt")
+      .lean(),
   ]);
 
-  return { from: query.from, to: query.to, rooms, allocations };
+  const bookingAllocations = bookings.flatMap((booking) =>
+    booking.rooms.map((room) => ({
+      _id: `${booking._id}:${room.roomId}`,
+      roomId: room.roomId,
+      bookingId: booking._id,
+      confirmationNumber: booking.confirmationNumber,
+      invoiceNumber: "",
+      roomNumberSnapshot: room.roomNumber,
+      checkinDate: booking.checkinDate,
+      checkoutDate: booking.checkoutDate,
+      status: "reserved" as const,
+      source: "booking" as const,
+      createdAt: booking.createdAt,
+    })),
+  );
+
+  return {
+    from: query.from,
+    to: query.to,
+    rooms,
+    allocations: [
+      ...allocations.map((allocation) => ({
+        ...allocation,
+        source: "invoice" as const,
+      })),
+      ...bookingAllocations,
+    ],
+  };
 }
 
 export async function listAvailableRooms(
   tenant: TenantContext,
   query: RoomAvailabilityQuery,
 ) {
-  const allocations = await RoomAllocationModel.find({
-    organizationId: tenant.organizationId,
-    status: { $in: ROOM_ALLOCATION_LOCK_STATUSES },
-    checkinDate: { $lt: query.checkoutDate },
-    checkoutDate: { $gt: query.checkinDate },
+  const excludedSources = [
     ...(query.excludeInvoiceId
-      ? { invoiceId: { $ne: query.excludeInvoiceId } }
-      : {}),
-  })
-    .select("roomId")
-    .lean();
+      ? [
+          {
+            sourceType: "invoice",
+            sourceId: new Types.ObjectId(query.excludeInvoiceId),
+          },
+        ]
+      : []),
+    ...(query.excludeBookingId
+      ? [
+          {
+            sourceType: "booking",
+            sourceId: new Types.ObjectId(query.excludeBookingId),
+          },
+        ]
+      : []),
+  ];
+  const [allocations, nightLocks] = await Promise.all([
+    RoomAllocationModel.find({
+      organizationId: tenant.organizationId,
+      status: { $in: ROOM_ALLOCATION_LOCK_STATUSES },
+      checkinDate: { $lt: query.checkoutDate },
+      checkoutDate: { $gt: query.checkinDate },
+      ...(query.excludeInvoiceId
+        ? { invoiceId: { $ne: query.excludeInvoiceId } }
+        : {}),
+    })
+      .select("roomId")
+      .lean(),
+    RoomNightLockModel.find({
+      organizationId: tenant.organizationId,
+      stayDate: { $gte: query.checkinDate, $lt: query.checkoutDate },
+      ...(excludedSources.length ? { $nor: excludedSources } : {}),
+    })
+      .select("roomId")
+      .lean(),
+  ]);
 
-  const unavailableRoomIds = allocations.map((allocation) => allocation.roomId);
+  const unavailableRoomIds = [
+    ...allocations.map((allocation) => allocation.roomId),
+    ...nightLocks.map((lock) => lock.roomId),
+  ];
   return RoomModel.find({
     organizationId: tenant.organizationId,
     isActive: true,
@@ -401,6 +513,19 @@ export async function syncRoomAllocations(
       },
       { session },
     );
+    await replaceRoomNightLocks(
+      {
+        organizationId: tenant.organizationId,
+        sourceType: "invoice",
+        sourceId: input.invoiceId,
+        sourceLabel: input.invoiceNumber,
+        roomIds: [],
+        checkinDate: input.checkinDate,
+        checkoutDate: input.checkoutDate,
+        active: false,
+      },
+      session,
+    );
     return;
   }
 
@@ -431,6 +556,22 @@ export async function syncRoomAllocations(
       );
     }
   }
+
+  await replaceRoomNightLocks(
+    {
+      organizationId: tenant.organizationId,
+      sourceType: "invoice",
+      sourceId: input.invoiceId,
+      sourceLabel: input.invoiceNumber,
+      roomIds: input.rooms.map((room) => room.roomId),
+      checkinDate: input.checkinDate,
+      checkoutDate: input.checkoutDate,
+      active:
+        input.workflowStatus === "reserved" ||
+        input.workflowStatus === "checkedIn",
+    },
+    session,
+  );
 
   await RoomAllocationModel.updateMany(
     {
