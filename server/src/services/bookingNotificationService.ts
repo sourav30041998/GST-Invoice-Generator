@@ -147,6 +147,11 @@ export function buildBookingEmailContent(
     `Hello ${context.customer.name},`,
     "",
     `${heading} from ${context.business.business_name}.`,
+    "",
+    "We are pleased to confirm your booking with us. Please find your reservation details below:",
+    "",
+    "Booking Details",
+    "",
     `Confirmation: ${context.booking.confirmationNumber}`,
     `Arrival: ${context.booking.checkinDate}`,
     `Departure: ${context.booking.checkoutDate}`,
@@ -160,22 +165,35 @@ export function buildBookingEmailContent(
         ]
       : []),
     "",
+    "Your booking has been successfully confirmed based on the details provided above.",
+    "", 
     "Terms and conditions:",
     context.booking.termsSnapshot,
     "",
-    "Please contact the property directly if any detail is incorrect.",
+    "We look forward to welcoming you and hope you have a pleasant stay with us.",
+    "",
+    "For any assistance or further information regarding your reservation, please feel free to contact us.",
+    "",
+    "Warm regards,",
+    `${context.business.business_name}`,
+    "Reservations Team"
   ].join("\n");
   const html = `
     <p>Hello ${escapeEmailHtml(context.customer.name)},</p>
     <p>${escapeEmailHtml(heading)} from <strong>${escapeEmailHtml(context.business.business_name)}</strong>.</p>
+    <p>We are pleased to confirm your booking with us. Please find your reservation details below:</p>
+    <h3>Booking Details</h3>
     <p><strong>Confirmation:</strong> ${escapeEmailHtml(context.booking.confirmationNumber)}<br>
     <strong>Arrival:</strong> ${escapeEmailHtml(context.booking.checkinDate)}<br>
     <strong>Departure:</strong> ${escapeEmailHtml(context.booking.checkoutDate)}<br>
     <strong>Expected occupancy:</strong> ${escapeEmailHtml(String(context.booking.guestCount))}<br>
     <strong>Room request:</strong> ${escapeEmailHtml(roomRequest)}</p>
     ${receipt}
+    <p>Your booking has been successfully confirmed based on the details provided above.</p>
     <p><strong>Terms and conditions</strong><br>${escapeEmailHtml(context.booking.termsSnapshot).replace(/\n/g, "<br>")}</p>
-    <p>Please contact the property directly if any detail is incorrect.</p>
+    <p>We look forward to welcoming you and hope you have a pleasant stay with us.</p>
+    <p>For any assistance or further information regarding your reservation, please feel free to contact us.</p>
+    <p>Warm regards,<br>${escapeEmailHtml(context.business.business_name)}<br>Reservations Team</p>
   `;
   return { subject, text, html };
 }
