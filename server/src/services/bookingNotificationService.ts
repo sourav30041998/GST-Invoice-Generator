@@ -172,7 +172,7 @@ export function buildBookingEmailContent(
     "",
     "We look forward to welcoming you and hope you have a pleasant stay with us.",
     "",
-    "For any assistance or further information regarding your reservation, please feel free to contact us.",
+    `For any assistance or further information regarding your reservation, please feel free to contact us at ${context.business.phone}.`,
     "",
     "Warm regards,",
     `${context.business.business_name}`,
@@ -192,8 +192,8 @@ export function buildBookingEmailContent(
     <p>Your booking has been successfully confirmed based on the details provided above.</p>
     <p><strong>Terms and conditions</strong><br>${escapeEmailHtml(context.booking.termsSnapshot).replace(/\n/g, "<br>")}</p>
     <p>We look forward to welcoming you and hope you have a pleasant stay with us.</p>
-    <p>For any assistance or further information regarding your reservation, please feel free to contact us.</p>
-    <p>Warm regards,<br>${escapeEmailHtml(context.business.business_name)}<br>Reservations Team</p>
+    <p>For any assistance or further information regarding your reservation, please feel free to contact us at <strong>${escapeEmailHtml(context.business.phone)}</strong>.</p>
+    <p><strong>Warm regards,</strong><br>${escapeEmailHtml(context.business.business_name)}<br>Reservations Team</p>
   `;
   return { subject, text, html };
 }
