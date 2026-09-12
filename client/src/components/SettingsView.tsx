@@ -541,6 +541,24 @@ export function SettingsView({
               onChange={(event) => updateField("website", event.target.value)}
             />
           </label>
+          <label className="field span-2">
+            <span>Check-in time</span>
+            <input
+              className="input"
+              type="time"
+              value={form.checkin_time || "12:00"}
+              onChange={(event) => updateField("checkin_time", event.target.value)}
+            />
+          </label>
+          <label className="field span-2">
+            <span>Check-out time</span>
+            <input
+              className="input"
+              type="time"
+              value={form.checkout_time || "11:00"}
+              onChange={(event) => updateField("checkout_time", event.target.value)}
+            />
+          </label>
           <label className="field full">
             <span>Invoice Terms</span>
             <textarea

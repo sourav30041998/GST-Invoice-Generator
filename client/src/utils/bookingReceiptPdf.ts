@@ -9,6 +9,42 @@ function money(value: number) {
   }).format(value)}`;
 }
 
+function formatStayDateTime(date: string, time?: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
+  const formattedDate = match ? `${match[3]} ${new Intl.DateTimeFormat("en-IN", { month: "short" }).format(new Date(`${date}T00:00:00Z`))} ${match[1]}` : date;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time || "")) return formattedDate;
+  const [hour, minute] = time!.split(":").map(Number);
+  return `${formattedDate}, ${String(hour % 12 || 12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "pm" : "am"}`;
+}
+
+function imageFormat(dataUrl: string) {
+  if (/^data:image\/jpe?g/i.test(dataUrl)) return "JPEG";
+  if (/^data:image\/webp/i.test(dataUrl)) return "WEBP";
+  return "PNG";
+}
+
+function drawBusinessLogo(doc: jsPDF, dataUrl: string | null, x: number, y: number, size: number) {
+  if (!dataUrl) return;
+  try {
+    const properties = doc.getImageProperties(dataUrl);
+    const ratio = Math.min((size - 2) / properties.width, (size - 2) / properties.height);
+    const width = properties.width * ratio;
+    const height = properties.height * ratio;
+    doc.addImage(dataUrl, imageFormat(dataUrl), x + (size - width) / 2, y + (size - height) / 2, width, height, undefined, "FAST");
+  } catch {
+    // Keep receipt generation available when an older logo is not a supported image.
+  }
+}
+
+function fitHeaderText(doc: jsPDF, value: string, maximumWidth: number, preferredSize: number, minimumSize: number) {
+  let fontSize = preferredSize;
+  doc.setFontSize(fontSize);
+  while (fontSize > minimumSize && doc.getTextWidth(value) > maximumWidth) {
+    fontSize -= 0.5;
+    doc.setFontSize(fontSize);
+  }
+}
+
 export function downloadBookingReceipt(receipt: BookingReceipt) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const left = 18;
@@ -34,20 +70,29 @@ export function downloadBookingReceipt(receipt: BookingReceipt) {
     y += rowHeight;
   };
 
+  const headerTextWidth = 132;
+  const logoSize = 25;
+  const headerNameY = 25;
+  drawBusinessLogo(doc, receipt.logoDataUrl, right - logoSize, 10, logoSize);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(17);
   doc.setTextColor(18, 28, 43);
-  const businessName = doc.splitTextToSize(
-    receipt.business.business_name || "Booking Receipt",
-    115,
-  );
-  doc.text(businessName, left, y);
-  y += businessName.length * 6.5 + 2;
+  fitHeaderText(doc, receipt.business.business_name || "Booking Receipt", headerTextWidth, 17, 11);
+  doc.text(receipt.business.business_name || "Booking Receipt", left, headerNameY);
+  const hasTagline = Boolean(receipt.business.tagline?.trim());
+  if (receipt.business.tagline?.trim()) {
+    doc.setFont("helvetica", "normal");
+    fitHeaderText(doc, receipt.business.tagline.trim(), headerTextWidth, 8.5, 6.5);
+    doc.setTextColor(50, 83, 106);
+    doc.text(receipt.business.tagline.trim(), left, headerNameY + 5);
+  }
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text("ADVANCE PAYMENT RECEIPT", left, y);
+  doc.setTextColor(18, 28, 43);
+  const receiptMetaY = hasTagline ? 39 : 35;
+  doc.text("ADVANCE PAYMENT RECEIPT", left, receiptMetaY);
   doc.setFontSize(10);
-  doc.text(receipt.payment.receiptNumber, right, y, { align: "right" });
-  y += 5;
+  doc.text(receipt.payment.receiptNumber, right, receiptMetaY, { align: "right" });
+  y = receiptMetaY + 5;
   doc.setDrawColor(205, 207, 211);
   doc.line(left, y, right, y);
   y += 10;
@@ -55,8 +100,8 @@ export function downloadBookingReceipt(receipt: BookingReceipt) {
   write("Received from", receipt.customer.name);
   write("Phone", receipt.customer.phone);
   write("Confirmation", receipt.booking.confirmationNumber);
-  write("Arrival", receipt.booking.checkinDate);
-  write("Departure", receipt.booking.checkoutDate);
+  write("Arrival", formatStayDateTime(receipt.booking.checkinDate, receipt.business.checkin_time));
+  write("Departure", formatStayDateTime(receipt.booking.checkoutDate, receipt.business.checkout_time));
   write("Occupancy", String(receipt.booking.guestCount));
   write(
     "Room request",

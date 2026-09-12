@@ -24,6 +24,8 @@ type BusinessSensitiveData = {
   address: unknown;
   contact: unknown;
   bankDetails: unknown;
+  checkinTime?: string;
+  checkoutTime?: string;
 };
 
 function organizationKey(record: AnyRecord, organizationId?: string) {
@@ -109,6 +111,12 @@ export function protectBusinessProfileRecord(
     address: record.address || {},
     contact: record.contact || {},
     bankDetails: record.bankDetails || {},
+    ...(typeof record.checkinTime === "string"
+      ? { checkinTime: record.checkinTime }
+      : {}),
+    ...(typeof record.checkoutTime === "string"
+      ? { checkoutTime: record.checkoutTime }
+      : {}),
   };
   return {
     ...record,
@@ -116,6 +124,8 @@ export function protectBusinessProfileRecord(
     address: {},
     contact: {},
     bankDetails: {},
+    ...(typeof record.checkinTime === "string" ? { checkinTime: "" } : {}),
+    ...(typeof record.checkoutTime === "string" ? { checkoutTime: "" } : {}),
     protectedData: encryptProtectedJson(
       "business-profile",
       tenantId,

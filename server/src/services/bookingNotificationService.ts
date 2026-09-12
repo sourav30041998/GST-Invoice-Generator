@@ -375,6 +375,8 @@ export async function sendBookingNotifications(
                 receiptNumber: context.payment.receiptNumber,
                 checkinDate: context.booking.checkinDate,
                 checkoutDate: context.booking.checkoutDate,
+                checkinTime: context.business.checkin_time,
+                checkoutTime: context.business.checkout_time,
                 guestCount: context.booking.guestCount,
                 requestedRooms: context.booking.requestedRooms || [],
                 amountMinor: context.payment.amountMinor,
@@ -395,13 +397,13 @@ export async function sendBookingNotifications(
                     content: buildBookingReceiptPdf(receiptInput),
                     contentType: "application/pdf",
                   },
-                  {
-                    filename: bookingSlipFilename(
-                      context.payment.receiptNumber,
-                    ),
-                    content: buildBookingSlipPdf(receiptInput),
-                    contentType: "application/pdf",
-                  },
+                  // {
+                  //   filename: bookingSlipFilename(
+                  //     context.payment.receiptNumber,
+                  //   ),
+                  //   content: buildBookingSlipPdf(receiptInput),
+                  //   contentType: "application/pdf",
+                  // },
                 ]
               : undefined;
           providerReference = await sendOrganizationEmail(tenant.organizationId, {

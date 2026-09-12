@@ -37,6 +37,8 @@ type BusinessProfileShape = {
     accountNumber?: string;
     ifsc?: string;
   };
+  checkinTime?: string;
+  checkoutTime?: string;
   taxPresets?: TaxPreset[];
   terms?: string;
   logoDataUrl?: string;
@@ -85,6 +87,8 @@ function presetToProfile(
       accountNumber: preset.bank_account || "",
       ifsc: preset.bank_ifsc || "",
     },
+    checkinTime: preset.checkin_time || "12:00",
+    checkoutTime: preset.checkout_time || "11:00",
     terms: preset.terms || "",
     logoDataUrl,
     isActive: true,
@@ -109,6 +113,8 @@ function profileToPreset(profile: BusinessProfileShape): PresetShape {
     bank_name: profile.bankDetails?.bankName || "",
     bank_account: profile.bankDetails?.accountNumber || "",
     bank_ifsc: profile.bankDetails?.ifsc || "",
+    checkin_time: profile.checkinTime || "12:00",
+    checkout_time: profile.checkoutTime || "11:00",
     terms: profile.terms || "",
   };
 }
@@ -142,6 +148,8 @@ function profileToBusinessSnapshot(profile: BusinessProfileShape) {
       accountNumber: preset.bank_account || "",
       ifsc: preset.bank_ifsc || "",
     },
+    checkinTime: preset.checkin_time || "12:00",
+    checkoutTime: preset.checkout_time || "11:00",
     terms: preset.terms || "",
   };
 }

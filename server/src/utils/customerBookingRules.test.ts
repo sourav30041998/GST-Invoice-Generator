@@ -185,7 +185,7 @@ test("customer communications never expose internal room assignments", () => {
     },
     customer: { name: "Example Guest" },
     payment: null,
-    business: { business_name: "Example Hotel" },
+    business: { business_name: "Example Hotel", phone: "+91 90000 00000" },
   } as any;
   const email = buildBookingEmailContent("confirmation", context);
   const whatsapp = buildBookingWhatsAppParameters(context);

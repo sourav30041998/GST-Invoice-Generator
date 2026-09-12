@@ -41,6 +41,15 @@ function formatStayDate(value: string) {
   return isoDate ? `${isoDate[3]} / ${isoDate[2]} / ${isoDate[1]}` : value;
 }
 
+function formatStayDateTime(date: string, time?: string) {
+  const safeTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(time || "")
+    ? time!
+    : "";
+  if (!safeTime) return formatStayDate(date);
+  const [hour, minute] = safeTime.split(":").map(Number);
+  return `${formatStayDate(date)}, ${String(hour % 12 || 12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
+}
+
 function formatPaymentMethod(method: string) {
   return method === "bankTransfer"
     ? "Bank transfer"
@@ -236,7 +245,7 @@ export function downloadStyledBookingSlip(receipt: BookingReceipt) {
     [
       "D",
       "BOOKING PERIOD",
-      `${formatStayDate(receipt.booking.checkinDate)}   TO   ${formatStayDate(receipt.booking.checkoutDate)}`,
+      `${formatStayDateTime(receipt.booking.checkinDate, receipt.business.checkin_time)}   TO   ${formatStayDateTime(receipt.booking.checkoutDate, receipt.business.checkout_time)}`,
       135,
       13,
     ],

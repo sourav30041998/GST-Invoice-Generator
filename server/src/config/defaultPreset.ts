@@ -14,6 +14,8 @@ export const defaultPreset = {
   bank_name: "Example Bank, Kolkata Branch",
   bank_account: "123456789012",
   bank_ifsc: "TEST0001234",
+  checkin_time: "12:00",
+  checkout_time: "11:00",
   terms:
     "This is a sample preset for testing. Replace these details with your business information before issuing an invoice.",
 };

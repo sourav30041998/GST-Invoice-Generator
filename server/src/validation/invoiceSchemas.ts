@@ -41,6 +41,13 @@ const optionalIsoDateSchema = z
 const shortText = (max: number) => z.string().trim().max(max);
 const optionalText = (max: number, fallback = "") =>
   shortText(max).optional().default(fallback);
+const optionalTime = (fallback: string) =>
+  z
+    .string()
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a valid time")
+    .optional()
+    .default(fallback);
 
 const decimalLiteral = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
@@ -186,6 +193,8 @@ export const presetSchema = z
     bank_name: optionalText(160),
     bank_account: optionalText(40),
     bank_ifsc: optionalText(20),
+    checkin_time: optionalTime("12:00"),
+    checkout_time: optionalTime("11:00"),
     terms: optionalText(700),
   })
   .strict();

@@ -13,6 +13,8 @@ export type BookingReceiptPdfInput = {
   receiptNumber: string;
   checkinDate: string;
   checkoutDate: string;
+  checkinTime?: string;
+  checkoutTime?: string;
   guestCount: number;
   requestedRooms: Array<{
     roomType: string;
@@ -130,7 +132,25 @@ function formatSlipDate(value: Date | string) {
 
 function formatStayDate(value: string) {
   const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  return isoDate ? `${isoDate[3]} / ${isoDate[2]} / ${isoDate[1]}` : value;
+  return isoDate
+    ? new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Kolkata",
+      }).format(new Date(`${value}T00:00:00+05:30`))
+    : value;
+}
+
+function formatStayDateTime(date: string, time?: string) {
+  const safeTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(time || "")
+    ? time!
+    : "";
+  if (!safeTime) return formatStayDate(date);
+  const [hour, minute] = safeTime.split(":").map(Number);
+  const period = hour >= 12 ? "PM" : "AM";
+  const twelveHour = hour % 12 || 12;
+  return `${formatStayDate(date)}, ${String(twelveHour).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
 function imageFormat(dataUrl: string) {
@@ -247,14 +267,31 @@ export function buildBookingReceiptPdf(input: BookingReceiptPdfInput) {
   doc.setTextColor(18, 28, 43);
   const businessName = doc.splitTextToSize(
     input.businessName || "Booking Receipt",
-    116,
+    132,
   ) as string[];
   doc.text(businessName, left, y);
   y += businessName.length * 6.5 + 2;
+  if (input.businessTagline?.trim()) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(91, 96, 106);
+    doc.text(
+      doc.splitTextToSize(input.businessTagline.trim(), 132) as string[],
+      left,
+      y,
+    );
+    y += 5;
+  }
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
+  doc.setTextColor(18, 28, 43);
   doc.text("ADVANCE PAYMENT RECEIPT", left, y);
+  drawBusinessLogo(doc, input, right - 25, 15, 25);
+
+  y = Math.max(y + 7, 46);
   doc.setFontSize(10);
   doc.text(input.receiptNumber, right, y, { align: "right" });
+
   y += 5;
   doc.setDrawColor(205, 207, 211);
   doc.line(left, y, right, y);
@@ -262,8 +299,8 @@ export function buildBookingReceiptPdf(input: BookingReceiptPdfInput) {
 
   writeRow("Received from", input.customerName);
   writeRow("Confirmation", input.confirmationNumber);
-  writeRow("Arrival", input.checkinDate);
-  writeRow("Departure", input.checkoutDate);
+  writeRow("Arrival", formatStayDateTime(input.checkinDate, input.checkinTime));
+  writeRow("Departure", formatStayDateTime(input.checkoutDate, input.checkoutTime));
   writeRow("Occupancy", String(input.guestCount));
   writeRow("Room request", formatRequestedRooms(input.requestedRooms));
   writeRow("Payment method", formatPaymentMethod(input.paymentMethod));
@@ -466,7 +503,7 @@ export function buildBookingSlipPdf(input: BookingReceiptPdfInput) {
     {
       mark: "D",
       label: "BOOKING PERIOD",
-      value: `${formatStayDate(input.checkinDate)}   TO   ${formatStayDate(input.checkoutDate)}`,
+      value: `${formatStayDateTime(input.checkinDate, input.checkinTime)}   TO   ${formatStayDateTime(input.checkoutDate, input.checkoutTime)}`,
       y: 135,
       height: 13,
     },

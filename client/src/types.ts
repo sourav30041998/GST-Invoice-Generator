@@ -14,6 +14,8 @@ export type Preset = {
   bank_name?: string;
   bank_account?: string;
   bank_ifsc?: string;
+  checkin_time?: string;
+  checkout_time?: string;
   terms?: string;
 };
 

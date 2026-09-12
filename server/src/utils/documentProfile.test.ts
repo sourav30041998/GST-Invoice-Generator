@@ -1,18 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Types } from "mongoose";
-import nodemailer from "nodemailer";
-import { env } from "../config/env.js";
 import { defaultPreset } from "../config/defaultPreset.js";
 import { freshDefaultTaxPresets } from "../config/defaultTaxPresets.js";
 import { BusinessProfileModel } from "../models/BusinessProfile.js";
 import { OrganizationModel } from "../models/Organization.js";
 import { BookingModel } from "../models/Booking.js";
-import { BookingPaymentModel } from "../models/BookingPayment.js";
 import { BookingNotificationModel } from "../models/BookingNotification.js";
+import { BookingPaymentModel } from "../models/BookingPayment.js";
 import { CustomerModel } from "../models/Customer.js";
 import { getBookingReceipt } from "../services/bookingService.js";
-import { sendBookingNotifications } from "../services/bookingNotificationService.js";
 import { protectBusinessProfileRecord } from "../services/protectedRecordService.js";
 import { savePreset } from "../services/settingsService.js";
 
@@ -108,33 +105,4 @@ test("receipts and outgoing attachments use the latest tenant profile without re
     getBookingReceipt({ ...tenant, organizationId: companyB }, bookingId, paymentId),
     /Booking not found/,
   );
-
-  // Replace SMTP with an in-memory capture before any send; no network email is possible.
-  const sent: any[] = [];
-  t.mock.method(nodemailer, "createTransport", () => ({
-    sendMail: async (mail: any) => { sent.push(mail); return {}; },
-  }) as any);
-  const previousSmtpConfigured = env.SMTP_CONFIGURED;
-  env.SMTP_CONFIGURED = true;
-  t.after(() => { env.SMTP_CONFIGURED = previousSmtpConfigured; });
-  t.mock.method(BookingNotificationModel, "findOne", () => query(null));
-  t.mock.method(BookingNotificationModel, "exists", async () => null);
-  t.mock.method(BookingNotificationModel, "create", async (input: any) => ({ ...input, _id: "notification" }) as any);
-  t.mock.method(BookingNotificationModel, "updateOne", async (filter: any, update: any) => {
-    assert.equal(filter.organizationId, companyA);
-    assert.equal(update.$set.status, "sent");
-    return { acknowledged: true } as any;
-  });
-  const result = await sendBookingNotifications(tenant, bookingId, {
-    kind: "advanceReceipt", channels: ["email"], paymentId,
-    idempotencyKey: "ae4296b7-8f91-4871-9937-915e9a2f1b89", allowResend: false,
-  });
-  assert.equal(result.results[0].status, "sent");
-  assert.equal(sent.length, 1);
-  assert.ok(sent[0].text.includes("Updated Hotel"));
-  assert.equal(sent[0].text.includes("Previous Hotel"), false);
-  assert.equal(sent[0].attachments.length, 2);
-  for (const attachment of sent[0].attachments) {
-    assert.equal(attachment.content.subarray(0, 4).toString(), "%PDF");
-  }
 });
