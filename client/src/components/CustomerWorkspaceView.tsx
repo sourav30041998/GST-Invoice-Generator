@@ -1920,7 +1920,7 @@ export function CustomerWorkspaceView({
                                 <button
                                   type="button"
                                   className="icon-button"
-                                  title="Download modern receipt"
+                                  title="Download advance receipt"
                                   onClick={() =>
                                     void downloadReceipt(
                                       booking,
@@ -1931,7 +1931,7 @@ export function CustomerWorkspaceView({
                                 >
                                   <Download size={15} />
                                 </button>
-                                <button
+                                {/* <button
                                   type="button"
                                   className="icon-button"
                                   title="Download booking slip"
@@ -1944,7 +1944,7 @@ export function CustomerWorkspaceView({
                                   }
                                 >
                                   <FileText size={15} />
-                                </button>
+                                </button> */}
                               </div>
                             ))
                           ) : (
