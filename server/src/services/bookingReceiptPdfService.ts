@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { drawAccommodationTariffs, appendAccommodationTariffs, hasAccommodationTariffs } from "../utils/accommodationTariffPdf.js";
 
 export type BookingReceiptPdfInput = {
   businessName: string;
@@ -20,6 +21,7 @@ export type BookingReceiptPdfInput = {
     roomType: string;
     bedsPerRoom: number;
     quantity: number;
+    tariffPerRoom?: number;
   }>;
   amountMinor: number;
   estimatedTotalMinor?: number;
@@ -302,7 +304,7 @@ export function buildBookingReceiptPdf(input: BookingReceiptPdfInput) {
   writeRow("Arrival", formatStayDateTime(input.checkinDate, input.checkinTime));
   writeRow("Departure", formatStayDateTime(input.checkoutDate, input.checkoutTime));
   writeRow("Occupancy", String(input.guestCount));
-  writeRow("Room request", formatRequestedRooms(input.requestedRooms));
+  if (!hasAccommodationTariffs(input.requestedRooms)) writeRow("Room request", formatRequestedRooms(input.requestedRooms));
   writeRow("Payment method", formatPaymentMethod(input.paymentMethod));
   writeRow(
     "Payment date",
@@ -313,6 +315,7 @@ export function buildBookingReceiptPdf(input: BookingReceiptPdfInput) {
     }).format(new Date(input.receivedAt)),
   );
 
+  y = drawAccommodationTariffs(doc, input.requestedRooms, y + 3, input.receiptNumber);
   y += 3;
   addPageIfNeeded(18);
   doc.setFillColor(245, 247, 249);
@@ -676,6 +679,7 @@ export function buildBookingSlipPdf(input: BookingReceiptPdfInput) {
     { align: "center" },
   );
 
+  appendAccommodationTariffs(doc, input.requestedRooms, input.receiptNumber);
   return Buffer.from(doc.output("arraybuffer"));
 }
 

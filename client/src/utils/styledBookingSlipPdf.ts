@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { BookingReceipt } from "../types";
 import { numWords } from "./calculations";
+import { appendAccommodationTariffs } from "./accommodationTariffPdf";
 
 const GREEN = [13, 78, 44] as const;
 const DEEP_GREEN = [8, 62, 35] as const;
@@ -410,6 +411,7 @@ export function downloadStyledBookingSlip(receipt: BookingReceipt) {
     { align: "center" },
   );
 
+  appendAccommodationTariffs(doc, receipt.booking.requestedRooms, receipt.payment.receiptNumber);
   doc.save(
     `booking-slip-${safeFilenamePart(receipt.payment.receiptNumber)}.pdf`,
   );

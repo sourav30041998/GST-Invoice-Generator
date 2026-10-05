@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MAX_INVOICE_AMOUNT } from "../utils/calculateInvoice.js";
 import { bookingStayDates } from "../utils/bookingRules.js";
+import { accommodationTotalMinor } from "../utils/accommodationTariffs.js";
 import { customerIdSchema } from "./customerSchemas.js";
 import { roomIdSchema } from "./roomSchemas.js";
 
@@ -27,7 +28,7 @@ const moneySchema = (label: string) =>
     .min(0, `${label} cannot be negative`)
     .max(MAX_INVOICE_AMOUNT, `${label} exceeds the supported limit`)
     .refine(
-      (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8,
+      (value) => value === Math.round(value * 100) / 100,
       `${label} can have at most two decimal places`,
     );
 
@@ -55,9 +56,20 @@ const initialPaymentSchema = z
 
 const requestedRoomSchema = z
   .object({
-    roomType: z.string().trim().max(80).optional().default(""),
+    roomType: z.string().trim().max(80).optional().default("")
+      .transform((value) => value || "Standard"),
     bedsPerRoom: z.coerce.number().int().min(1).max(50),
     quantity: z.coerce.number().int().min(1).max(20),
+    tariffPerRoom: z
+      .number()
+      .finite()
+      .min(0)
+      .max(MAX_INVOICE_AMOUNT)
+      .refine(
+        (value) => value === Math.round(value * 100) / 100,
+        "Room tariff can have at most two decimal places",
+      )
+      .optional(),
   })
   .strict();
 
@@ -106,6 +118,38 @@ function validateBooking(
   context: z.RefinementCtx,
   requireInitialPayment = false,
 ) {
+  if (
+    requireInitialPayment &&
+    booking.requestedRooms.some((row) => row.tariffPerRoom === undefined)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["requestedRooms"],
+      message: "Enter the agreed tariff for every room combination",
+    });
+  }
+  try {
+    const calculated = accommodationTotalMinor(booking.requestedRooms);
+    if (
+      calculated !== undefined &&
+      calculated !== Math.round(booking.estimatedTotal * 100)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["estimatedTotal"],
+        message: "Estimated total must equal the sum of accommodation tariffs",
+      });
+    }
+  } catch (error) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["requestedRooms"],
+      message:
+        error instanceof Error
+          ? error.message
+          : "Invalid accommodation tariffs",
+    });
+  }
   try {
     bookingStayDates(booking.checkinDate, booking.checkoutDate);
   } catch (error) {
@@ -175,7 +219,8 @@ function validateBooking(
   }
   if (
     booking.initialPayment &&
-    booking.estimatedTotal > 0 &&
+    (booking.estimatedTotal > 0 ||
+      booking.requestedRooms.some((row) => row.tariffPerRoom !== undefined)) &&
     booking.initialPayment.amount > booking.estimatedTotal
   ) {
     context.addIssue({

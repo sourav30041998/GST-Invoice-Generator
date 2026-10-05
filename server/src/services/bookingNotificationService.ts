@@ -73,12 +73,13 @@ function requestedRoomSummary(
     roomType: string;
     bedsPerRoom: number;
     quantity: number;
+    tariffPerRoom?: number;
   }> = [],
 ) {
   const summary = requests
     .map(
       (request) =>
-        `${request.quantity} x ${request.bedsPerRoom}-bed${request.roomType ? ` ${request.roomType}` : ""} room${request.quantity === 1 ? "" : "s"}`,
+        `${request.quantity} x ${request.bedsPerRoom}-bed${request.roomType ? ` ${request.roomType}` : ""} room${request.quantity === 1 ? "" : "s"}${request.tariffPerRoom !== undefined ? ` at ${formatMoney(Math.round(request.tariffPerRoom * 100))} per room for the entire stay; total ${formatMoney(Math.round(request.tariffPerRoom * 100) * request.quantity)}` : ""}`,
     )
     .join(", ");
   return summary || "Not recorded";

@@ -1199,13 +1199,15 @@
     background: #f8f9fa;
   }
 
-  .booking-request-row > label {
+  .booking-request-row > label,
+  .booking-preference-field {
     display: grid;
     gap: 4px;
     min-width: 0;
   }
 
-  .booking-request-row > label > span {
+  .booking-request-row > label > span,
+  .booking-preference-field > label {
     color: #66707d;
     font-size: 9px;
     font-weight: 600;
@@ -1213,6 +1215,54 @@
 
   .booking-request-row > .icon-button {
     margin-bottom: 1px;
+    grid-column: 4;
+    grid-row: 1 / 3;
+    align-self: center;
+  }
+
+  .booking-preference .state-option {
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .booking-preference .state-options.above {
+    inset: auto 0 calc(100% + 4px) 0;
+  }
+
+  .booking-preference .state-option.active,
+  .booking-preference .state-option.selected,
+  .booking-preference .state-option:hover {
+    background: #e7f3ef;
+    color: #14594b;
+  }
+
+  .booking-preference .state-combobox-control button {
+    flex-shrink: 0;
+  }
+
+  .booking-request-row > .booking-tariff-field {
+    grid-column: 1 / 3;
+  }
+
+  .booking-tariff-total {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+    color: #155f52;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  .booking-tariff-total > span {
+    font-size: 10px;
+    color: #4e5968;
+  }
+
+  .booking-tariff-total > strong {
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    font-size: 12px;
   }
 
   .booking-request-add {
@@ -1697,7 +1747,15 @@
       grid-template-columns: repeat(2, minmax(0, 1fr)) 32px;
     }
 
-    .booking-request-row > label:nth-child(3) {
+    .booking-request-row > .booking-preference-field {
+      grid-column: 1 / 3;
+    }
+
+    .booking-request-row > .booking-tariff-field {
+      grid-column: 1 / 3;
+    }
+
+    .booking-tariff-total {
       grid-column: 1 / 3;
     }
 

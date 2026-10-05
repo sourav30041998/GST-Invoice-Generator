@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { BookingReceipt } from "../types";
 import { numWords } from "./calculations";
+import { drawAccommodationTariffs, appendAccommodationTariffs, hasAccommodationTariffs } from "./accommodationTariffPdf";
 
 function money(value: number) {
   return `Rs. ${new Intl.NumberFormat("en-IN", {
@@ -98,12 +99,16 @@ export function downloadBookingReceipt(receipt: BookingReceipt) {
   y += 10;
 
   write("Received from", receipt.customer.name);
-  write("Phone", receipt.customer.phone);
+  const phoneDigits = (receipt.customer.phone || "").replace(/\D/g, "");
+  const maskedPhone = phoneDigits.length > 4
+    ? `******${phoneDigits.slice(-4)}`
+    : phoneDigits ? "****" : "-";
+  write("Phone", maskedPhone);
   write("Confirmation", receipt.booking.confirmationNumber);
   write("Arrival", formatStayDateTime(receipt.booking.checkinDate, receipt.business.checkin_time));
   write("Departure", formatStayDateTime(receipt.booking.checkoutDate, receipt.business.checkout_time));
   write("Occupancy", String(receipt.booking.guestCount));
-  write(
+  if (!hasAccommodationTariffs(receipt.booking.requestedRooms)) write(
     "Room request",
     receipt.booking.requestedRooms
       .map(
@@ -118,6 +123,7 @@ export function downloadBookingReceipt(receipt: BookingReceipt) {
     new Date(receipt.payment.receivedAt).toLocaleString("en-IN"),
   );
 
+  y = drawAccommodationTariffs(doc, receipt.booking.requestedRooms, y + 3, receipt.payment.receiptNumber);
   y += 3;
   addPageIfNeeded(18);
   doc.setFillColor(245, 247, 249);
@@ -376,6 +382,7 @@ export function downloadBookingSlip(receipt: BookingReceipt) {
     { align: "right" },
   );
 
+  appendAccommodationTariffs(doc, receipt.booking.requestedRooms, receipt.payment.receiptNumber);
   doc.save(
     `booking-slip-${safeFilenamePart(receipt.payment.receiptNumber)}.pdf`,
   );

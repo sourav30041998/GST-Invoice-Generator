@@ -109,8 +109,8 @@ const bookingBase = {
   checkoutDate: "2026-09-03",
   roomIds: ["64b7f19d71c6411b74000002"],
   requestedRooms: [
-    { roomType: "Family", bedsPerRoom: 4, quantity: 1 },
-    { roomType: "Standard", bedsPerRoom: 2, quantity: 1 },
+    { roomType: "Family", bedsPerRoom: 4, quantity: 1, tariffPerRoom: 3000 },
+    { roomType: "Standard", bedsPerRoom: 2, quantity: 1, tariffPerRoom: 2000 },
   ],
   guestCount: 2,
   estimatedTotal: 5000,

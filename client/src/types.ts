@@ -370,6 +370,7 @@ export type BookingRoomRequest = {
   roomType: string;
   bedsPerRoom: number;
   quantity: number;
+  tariffPerRoom?: number;
 };
 
 export type BookingDelivery = {

@@ -24,6 +24,7 @@ export type BookingSensitiveData = {
     roomType: string;
     bedsPerRoom: number;
     quantity: number;
+    tariffPerRoom?: number;
   }>;
 };
 

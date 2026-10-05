@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import { ApiError } from "../middleware/errorHandler.js";
 import { AuditLogModel } from "../models/AuditLog.js";
 import { BookingModel } from "../models/Booking.js";
+import { accommodationTotalMinor } from "../utils/accommodationTariffs.js";
 import { BookingNotificationModel } from "../models/BookingNotification.js";
 import { BookingPaymentModel } from "../models/BookingPayment.js";
 import { CounterModel } from "../models/Counter.js";
@@ -458,7 +459,9 @@ export async function createBooking(
             checkoutDate: payload.checkoutDate,
             rooms,
             guestCount: payload.guestCount,
-            estimatedTotalMinor: rupeesToMinorUnits(payload.estimatedTotal),
+            estimatedTotalMinor:
+              accommodationTotalMinor(payload.requestedRooms) ??
+              rupeesToMinorUnits(payload.estimatedTotal),
             advanceBalanceMinor: payload.initialPayment
               ? rupeesToMinorUnits(payload.initialPayment.amount)
               : 0,
@@ -675,9 +678,25 @@ export async function updateBooking(
         booking,
         session,
       );
-      const estimatedTotalMinor = rupeesToMinorUnits(payload.estimatedTotal);
+      const calculatedTotal = accommodationTotalMinor(payload.requestedRooms);
+      const previousPlan =
+        revealBookingRecord(booking.toObject(), tenant.organizationId)
+          .requestedRooms || [];
       if (
-        estimatedTotalMinor > 0 &&
+        calculatedTotal === undefined &&
+        previousPlan.some(
+          (row: { tariffPerRoom?: number }) => row.tariffPerRoom !== undefined,
+        )
+      ) {
+        throw new ApiError(
+          422,
+          "Agreed accommodation tariffs cannot be removed. Enter a tariff for every room combination.",
+        );
+      }
+      const estimatedTotalMinor =
+        calculatedTotal ?? rupeesToMinorUnits(payload.estimatedTotal);
+      if (
+        (estimatedTotalMinor > 0 || calculatedTotal !== undefined) &&
         advanceReceivedMinor > estimatedTotalMinor
       ) {
         throw new ApiError(
@@ -779,7 +798,9 @@ export async function recordBookingPayment(
       const booking = await BookingModel.findOne({
         _id: bookingId,
         organizationId: tenant.organizationId,
-      }).session(session);
+      })
+        .select("+protectedData")
+        .session(session);
       if (!booking) throw new ApiError(404, "Booking not found");
       if (["cancelled", "completed"].includes(booking.status)) {
         throw new ApiError(409, "Payments cannot be added to a closed booking");
@@ -808,7 +829,11 @@ export async function recordBookingPayment(
         throw new ApiError(422, "Refund cannot exceed the recorded advance");
       }
       if (
-        booking.estimatedTotalMinor > 0 &&
+        (booking.estimatedTotalMinor > 0 ||
+          accommodationTotalMinor(
+            revealBookingRecord(booking.toObject(), tenant.organizationId)
+              .requestedRooms || [],
+          ) !== undefined) &&
         nextAdvance > booking.estimatedTotalMinor
       ) {
         throw new ApiError(

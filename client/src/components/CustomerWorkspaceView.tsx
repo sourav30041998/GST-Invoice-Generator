@@ -46,9 +46,11 @@ import type {
   Settings,
 } from "../types";
 import { downloadBookingReceipt } from "../utils/bookingReceiptPdf";
+import { accommodationTotal, MAX_BOOKING_ESTIMATE } from "../utils/accommodationTariffs";
 import { downloadStyledBookingSlip } from "../utils/styledBookingSlipPdf";
 import { todayIso } from "../utils/dates";
 import { StateCombobox } from "./StateCombobox";
+import { BookingPreferenceCombobox } from "./BookingPreferenceCombobox";
 
 type CustomerWorkspaceProps = {
   settings: Settings;
@@ -87,6 +89,7 @@ type BookingRoomRequestForm = {
   roomType: string;
   bedsPerRoom: string;
   quantity: string;
+  tariffPerRoom: string;
 };
 
 type BookingFormState = {
@@ -97,6 +100,7 @@ type BookingFormState = {
   guestCount: string;
   occupancyAuto: boolean;
   estimatedTotal: string;
+  estimatedAuto: boolean;
   notes: string;
   terms: string;
   advanceAmount: string;
@@ -252,6 +256,7 @@ function blankRoomRequest(): BookingRoomRequestForm {
     roomType: "",
     bedsPerRoom: "2",
     quantity: "1",
+    tariffPerRoom: "",
   };
 }
 
@@ -285,6 +290,7 @@ function roomRequestForm(
         roomType: request.roomType,
         bedsPerRoom: String(request.bedsPerRoom),
         quantity: String(request.quantity),
+        tariffPerRoom: request.tariffPerRoom === undefined ? "" : String(request.tariffPerRoom),
       }))
     : [blankRoomRequest()];
 }
@@ -302,6 +308,7 @@ function blankBookingForm(
     guestCount: "2",
     occupancyAuto: true,
     estimatedTotal: "",
+    estimatedAuto: true,
     notes: "",
     terms: settings.preset.terms?.trim() || DEFAULT_TERMS,
     advanceAmount: "",
@@ -324,6 +331,7 @@ function bookingFormFromRecord(
     requestedRooms,
     guestCount: String(booking.guestCount),
     occupancyAuto: booking.guestCount === requestedCapacity(requestedRooms),
+    estimatedAuto: booking.requestedRooms.some((row) => row.tariffPerRoom !== undefined),
     estimatedTotal: booking.estimatedTotal
       ? String(booking.estimatedTotal)
       : "",
@@ -342,9 +350,15 @@ function withRequestedRooms(
   requestedRooms: BookingRoomRequestForm[],
 ): BookingFormState {
   const capacity = requestedCapacity(requestedRooms);
+  const estimatedAuto = form.estimatedAuto || requestedRooms.some((row) => row.tariffPerRoom !== "");
+  const complete = requestedRooms.every((row) => /^(?:\d+)(?:\.\d{1,2})?$/.test(row.tariffPerRoom) && row.quantity !== "");
   return {
     ...form,
     requestedRooms,
+    estimatedAuto,
+    estimatedTotal: estimatedAuto
+      ? complete ? String(accommodationTotal(requestedRooms.map((row) => ({ quantity: Number(row.quantity), tariffPerRoom: Number(row.tariffPerRoom) })))) : ""
+      : form.estimatedTotal,
     guestCount: form.occupancyAuto
       ? capacity > 0
         ? String(capacity)
@@ -874,7 +888,7 @@ export function CustomerWorkspaceView({
 
   const updateAccommodation = (
     requestId: string,
-    field: "quantity" | "bedsPerRoom" | "roomType",
+    field: "quantity" | "bedsPerRoom" | "roomType" | "tariffPerRoom",
     value: string,
   ) => {
     setBookingForm((current) => {
@@ -1107,10 +1121,17 @@ export function CustomerWorkspaceView({
     const advanceAmount = Number(bookingForm.advanceAmount || 0);
     const guestCount = Number(bookingForm.guestCount);
     const requestedRooms = bookingForm.requestedRooms.map((request) => ({
-      roomType: request.roomType.trim(),
+      roomType: request.roomType.trim() || "Standard",
       bedsPerRoom: Number(request.bedsPerRoom),
       quantity: Number(request.quantity),
+      ...(request.tariffPerRoom !== "" ? { tariffPerRoom: Number(request.tariffPerRoom) } : {}),
     }));
+    if (bookingForm.estimatedAuto && bookingForm.requestedRooms.some((row) =>
+      !/^\d+(?:\.\d{1,2})?$/.test(row.tariffPerRoom) || Number(row.tariffPerRoom) > MAX_BOOKING_ESTIMATE)) {
+      setBookingFormError({ title: "Room tariff is missing or invalid", field: "requestedRooms",
+        message: "Enter the agreed price per room for the entire stay for every combination. Use up to two decimal places and a maximum of Rs. 9,999,999,999." });
+      return;
+    }
     if (!bookingForm.checkinDate) {
       setBookingFormError({
         title: "Arrival date is missing",
@@ -1196,11 +1217,11 @@ export function CustomerWorkspaceView({
       });
       return;
     }
-    if (!Number.isFinite(estimatedTotal) || estimatedTotal < 0) {
+    if (!Number.isFinite(estimatedTotal) || estimatedTotal < 0 || estimatedTotal > MAX_BOOKING_ESTIMATE) {
       setBookingFormError({
         title: "Estimated total is not valid",
         message:
-          "Enter zero or a valid positive amount for the estimated total.",
+          "The accommodation total must be between zero and Rs. 9,999,999,999. Adjust the tariffs or room quantities.",
         field: "estimatedTotal",
       });
       return;
@@ -1218,7 +1239,7 @@ export function CustomerWorkspaceView({
     }
     if (
       !editingBooking &&
-      estimatedTotal > 0 &&
+      (estimatedTotal > 0 || bookingForm.estimatedAuto) &&
       advanceAmount > estimatedTotal
     ) {
       setBookingFormError({
@@ -2285,6 +2306,8 @@ export function CustomerWorkspaceView({
                     inputMode="decimal"
                     data-booking-field="estimatedTotal"
                     value={bookingForm.estimatedTotal}
+                    readOnly={bookingForm.estimatedAuto}
+                    placeholder={bookingForm.estimatedAuto ? "Awaiting tariffs" : ""}
                     onChange={(event) =>
                       setBookingForm({
                         ...bookingForm,
@@ -2357,22 +2380,23 @@ export function CustomerWorkspaceView({
                           }
                         />
                       </label>
-                      <label>
-                        <span>Preference</span>
-                        <input
-                          className="input"
-                          maxLength={80}
-                          value={request.roomType}
-                          placeholder="Any room type"
-                          onChange={(event) =>
-                            updateAccommodation(
-                              request.id,
-                              "roomType",
-                              event.target.value,
-                            )
-                          }
-                        />
+                      <BookingPreferenceCombobox
+                        value={request.roomType}
+                        onChange={(value) => updateAccommodation(request.id, "roomType", value)}
+                      />
+                      <label className="booking-tariff-field">
+                        <span>Tariff / room (entire stay) *</span>
+                        <input className="input" type="text" inputMode="decimal" maxLength={13}
+                          aria-label={`Tariff per room ${index + 1}`} placeholder="0.00"
+                          value={request.tariffPerRoom}
+                          onChange={(event) => updateAccommodation(request.id, "tariffPerRoom", event.target.value)} />
                       </label>
+                      <div className="booking-tariff-total" aria-live="polite">
+                        <span>Room total</span>
+                        <strong>{/^\d+(?:\.\d{1,2})?$/.test(request.tariffPerRoom)
+                          ? money(accommodationTotal([{ quantity: Number(request.quantity || 0), tariffPerRoom: Number(request.tariffPerRoom) }]))
+                          : "--"}</strong>
+                      </div>
                       <button
                         className="icon-button danger-text"
                         type="button"
